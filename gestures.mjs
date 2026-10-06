@@ -13,7 +13,10 @@ export function describeHand(points, aspect = 1) {
   const hasDepth=[0,5,17].every(i=>Number.isFinite(points[i].z));
   const depthQuality=hasDepth?Math.abs(normal.z)/Math.max(1e-8,Math.hypot(normal.x,normal.y,normal.z)):0;
   const depthSize=Math.sqrt(distance(points[5],points[17],aspect)*distance(points[0],points[9],aspect));
-  return {x:1-points[8].x,y:points[8].y,px:1-palm.reduce((n,i)=>n+points[i].x,0)/5,py:palm.reduce((n,i)=>n+points[i].y,0)/5,wx:1-points[0].x,wy:points[0].y,pinch,open:extended>=3&&pinch>.38,fist:extended===0&&pinch>.55,size,depthSize,depthQuality,depthShape:distance(points[5],points[17],aspect)/Math.max(.001,distance(points[0],points[9],aspect))};
+  const faceSign=Math.sign(normal.z)||1;
+  const extendedPalmFingers=[[12,10],[16,14],[20,18]].filter(([tip,pip])=>distance(points[tip],points[0],aspect)>distance(points[pip],points[0],aspect)*1.1).length;
+  const palmOpen=extendedPalmFingers>=2;
+  return {palmOpen,brakeCandidate:extendedPalmFingers<2,closedPalm:extendedPalmFingers===0,palmYaw:Math.atan2(normal.x*faceSign,Math.abs(normal.z)),palmPitch:Math.atan2(normal.y*faceSign,Math.abs(normal.z)),palmRoll:Math.atan2(-(points[9].x-points[0].x)*aspect,points[0].y-points[9].y),x:1-points[8].x,y:points[8].y,px:1-palm.reduce((n,i)=>n+points[i].x,0)/5,py:palm.reduce((n,i)=>n+points[i].y,0)/5,wx:1-points[0].x,wy:points[0].y,pinch,open:extended>=3&&pinch>.38,fist:extended===0&&pinch>.55,size,depthSize,depthQuality,depthShape:distance(points[5],points[17],aspect)/Math.max(.001,distance(points[0],points[9],aspect))};
 }
 export function containedPoint(x,y,videoWidth,videoHeight,width,height) {
   if (![x,y,videoWidth,videoHeight,width,height].every(Number.isFinite) || Math.min(videoWidth,videoHeight,width,height)<=0) return null;
@@ -21,7 +24,7 @@ export function containedPoint(x,y,videoWidth,videoHeight,width,height) {
   return {x:(width-videoWidth*scale)/2+x*videoWidth*scale,y:(height-videoHeight*scale)/2+y*videoHeight*scale};
 }
 export class GestureEngine {
-  constructor(){this.reset();}
+  constructor({graceMs=0}={}){this.graceMs=graceMs;this.reset();}
   reset(){this.tracks=[];this.nextID=1;this.lastTime=null;this.lastRelease=null;this.summonAt=-Infinity;}
   update(observations,time,phase='model') {
     const events=[];
@@ -29,26 +32,35 @@ export class GestureEngine {
     if (this.lastTime!==null && (time<=this.lastTime || time-this.lastTime>300)) this.reset();
     this.lastTime=time;
     const valid=observations.filter(h=>h&&[h.x,h.y,h.wx,h.wy,h.pinch].every(Number.isFinite)).slice(0,2);
-    const remaining=[...valid], next=[];
+    // Observation state never overrides tracker-owned latches.
+    const remaining=valid.map(({id,down,armed,openSince,downSince,palmSince,missingSince,...observation})=>observation), next=[], retained=[];
+    const d=(a,b)=>a.handLabel&&b.handLabel&&a.handLabel!==b.handLabel?Infinity:Math.hypot(a.wx-b.wx,a.wy-b.wy);
     // A global two-hand assignment avoids detector array-order swaps.
-    let old=this.tracks;
+    let old=[...this.tracks];
+    // One visible hand must match the closest previous hand, not the first
+    // detector slot. Ambiguous one-of-two observations freeze rather than swap.
+    if(old.length>=2&&remaining.length===1){
+      old.sort((a,b)=>d(a,remaining[0])-d(b,remaining[0]));
+      if(Math.abs(d(old[0],remaining[0])-d(old[1],remaining[0]))<.025)remaining.length=0;
+    }
     if(old.length===2 && remaining.length===2){
-      const d=(a,b)=>Math.hypot(a.wx-b.wx,a.wy-b.wy);
+      
       const assignments=[[0,1],[1,0]].filter(([a,b])=>d(old[0],remaining[a])<.32&&d(old[1],remaining[b])<.32);
       assignments.sort((a,b)=>d(old[0],remaining[a[0]])+d(old[1],remaining[a[1]])-d(old[0],remaining[b[0]])-d(old[1],remaining[b[1]]));
       if(assignments.length){next.push({...old[0],...remaining[assignments[0][0]]},{...old[1],...remaining[assignments[0][1]]});remaining.length=0;old=[];}
     }
     for(const t of old){
       let index=-1,best=.32;
-      remaining.forEach((h,i)=>{const d=Math.hypot(t.wx-h.wx,t.wy-h.wy);if(d<best){best=d;index=i;}});
-      if(index<0){events.push({type:'lost',id:t.id});continue;}
+      remaining.forEach((h,i)=>{const delta=d(t,h);if(delta<best){best=delta;index=i;}});
+      if(index<0){const missingSince=t.missingSince??time;if(time-missingSince<this.graceMs){retained.push({...t,missingSince});events.push({type:'missing',id:t.id});}else events.push({type:'lost',id:t.id});continue;}
       const h=remaining.splice(index,1)[0];
       next.push({...t,...h});
     }
     for(const h of remaining) next.push({...h,id:this.nextID++,down:false,armed:false,openSince:null,downSince:null,palmSince:null});
-    if(this.tracks.length && !next.some(h=>h.id===this.tracks[0].id)){this.lastRelease=null;events.push({type:'cancel'});}
-    this.tracks=next;
+    if(this.tracks.length && ![...next,...retained].some(h=>h.id===this.tracks[0].id)){this.lastRelease=null;events.push({type:'cancel'});}
+    this.tracks=[...next,...retained];
     for(const h of next){
+      if(h.missingSince!==undefined){events.push({type:'reacquired',id:h.id});delete h.missingSince;}
       const isPrimary=h===next[0];
       if(h.pinch>=.46){
         if(h.openSince===null) h.openSince=time;
@@ -74,5 +86,6 @@ export class GestureEngine {
     return {hands:next.map(h=>({...h})),events};
   }
 }
+
 
 

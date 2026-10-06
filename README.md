@@ -1,27 +1,25 @@
 # HOLO / SPACE
-カメラの前の手で、3D人体模型を呼び出し、つかみ、移動・回転・拡大できる教育用体験アプリです。v0.8。
+Webカメラの手で3D解剖模型を扱う教育用体験アプリ。公開版 v0.11。
 
-**[体験URL](https://daijirohaba.github.io/Holo-Space/) · [操作ガイド](https://daijirohaba.github.io/Holo-Space/guide.html) · [日本語ガイド原稿](docs/操作ガイド.md)**
+**[体験URL](https://daijirohaba.github.io/Holo-Space/) · [操作ガイド](https://daijirohaba.github.io/Holo-Space/guide.html)**
 
-## 30秒で始める
-1. カメラ付きPCのChrome／Edgeで体験URLを開き、「カメラで体験」を押して許可。
-2. 開いた手を3秒かざし、アイコンへ指先を合わせ、親指と人差し指を1回つけて離して決定。
-3. 光る枠内をつまんで保持して模型を動かし、離して配置。
-4. 右側の「掌で回転」「両手で自由操作」から選択。停止・中央・メニューへは手でもマウスでも戻れます。
+1. カメラ開始→開いた手を3秒→模型のアイコンを1回タップ。
+2. 両掌を約0.7秒静止→発光している掌で回転。
+3. 操作掌をこぶしにして固定。回転中の担当手のつまみは別操作を開始しません。
+4. 指を開いて片手ずつつまむ→角度を保って移動・拡大。
+5. 離して配置→両掌を再び保持して回転。
+固定後、直接再回転する場合は両手を一度軽く握ってから開くか、掌モードをタップします。
+回転中にアイコンを操作するときは掌を静止し、もう片手でタップしてください。
 
-カメラなしでも「メニューを開く」からマウスで試せます。操作パネルの上端はつまみ／ドラッグで移動できます。
+通常1体、3体比較は任意。自由回転を含む両手操作は別モード。浮遊パネルと操作パレットも個別に配置できます。
+最新版はHAND INTERACTION · 11。古い表示ならCtrl＋F5。
 
-## ローカル起動
-Node.jsを使用する場合：node server.mjs、http://127.0.0.1:8796/ を開く。WindowsではSTART.cmdも利用できます。
-依存ファイルは同梱しており、体験用のnpm installは不要です。
+PCのChrome/Edgeとカメラ許可が必要。カメラなしでもマウスで体験可能。
+ローカル起動は node server.mjs または START.cmd。npm test は合成単体テスト72件。依存資産は同梱済み。
 
-## テストと確認範囲
-npm test で合成単体テストを実行します。単体59件、仮想カメラ＋合成ランドマークのブラウザ37項目を確認。Claudeコード監査はPASS_WITH_MINOR_ISSUES、その後に軽微指摘2点を修正しました。実カメラの認識率・操作感・遅延は未確認です。
-カメラ映像を送信・録画する機能はありません。教育・体験用の試作版であり、臨床評価用ではありません。
+[操作仕様](OPERATION_SPEC.md) / [更新と確認範囲](docs/更新記録.md) / [出典](ATTRIBUTION.md)
+実カメラの認識率・操作感・端から端までの遅延は未確認。カメラ映像を録画・送信する機能はありません。
 
-## ライセンスと出典
-解剖モデルを含む体験版は非商用利用に限定します。[ATTRIBUTION.md](ATTRIBUTION.md) と [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。アプリ固有コードはMIT、第三者素材は各素材のライセンスに従います。MITは解剖モデルの利用条件を変更しません。
-
-BodyParts3D - The Database Center for Life Science - CC-BY-SA 2.1 Japan
-Z-Anatomy - The open source atlas of anatomy - CC-BY-SA 4.0
-Kidney - by lissiecowley - CC-BY-NC 4.0
+解剖モデルを含む体験版は非商用。アプリ固有コードはMIT、第三者素材は各ライセンス。MITは解剖モデルの利用条件を変更しません。
+BodyParts3D / DBCLS: CC-BY-SA 2.1 Japan。Z-Anatomy: CC-BY-SA 4.0。Kidney by lissiecowley: CC-BY-NC 4.0。
+詳細はATTRIBUTION.mdとTHIRD_PARTY_NOTICES.mdを参照してください。
