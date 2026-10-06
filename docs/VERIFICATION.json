@@ -1,0 +1,22 @@
+{
+  "version": "0.8",
+  "claude": {
+    "status": "EXECUTED",
+    "decision": "PASS_WITH_MINOR_ISSUES",
+    "blockers": 0,
+    "postAuditFixes": [
+      "Continuous open-finger arming interval",
+      "Cached DOM target enabled/visible validation"
+    ],
+    "reviewLimitations": [
+      "Physical camera not verified",
+      "Reviewer did not read all test/layout/depth source files in full"
+    ]
+  },
+  "synthetic": {
+    "unitPassed": 59,
+    "browserPassed": 37
+  },
+  "physicalCameraVerified": false,
+  "privateInputsPublished": false
+}

@@ -1,0 +1,11 @@
+{
+  "name": "holo-space",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/gestures.test.mjs tests/v08-input.test.mjs tests/v08-flow.test.mjs tests/v08-spatial.test.mjs",
+    "pretest": "node -e \"require('node:fs').mkdirSync('tests/results',{recursive:true})\""
+  }
+}

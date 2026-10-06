@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {GestureEngine,containedPoint,describeHand} from '../gestures.mjs';
+const hand=(x=.5,pinch=1,open=false)=>({x,y:.5,wx:x,wy:.6,pinch,open,size:.15});
+const tick=(g,t,h,phase='idle')=>g.update(h,t,phase);
+function arm(g,t=0,x=.5){tick(g,t,[hand(x)]);return tick(g,t+100,[hand(x)]);}
+test('coordinates match contain letterboxing and mirrored input',()=>{for(const [x,y,expected] of [[.25,.5,{x:250,y:500}],[1,1,{x:1000,y:781.25}]]){const p=containedPoint(x,y,1920,1080,1000,1000);assert.ok(Math.abs(p.x-expected.x)<1e-9);assert.ok(Math.abs(p.y-expected.y)<1e-9);}});
+test('invalid camera dimensions do not generate coordinates',()=>assert.equal(containedPoint(.5,.5,0,0,1000,1000),null));
+test('invalid or tiny landmark hands are rejected',()=>{assert.equal(describeHand([]),null);assert.equal(describeHand(Array.from({length:21},()=>({x:.5,y:.5}))),null);});
+test('open palm summons after sustained hold only',()=>{const g=new GestureEngine();for(let t=0;t<750;t+=50)assert.equal(tick(g,t,[hand(.5,1,true)]).events.some(e=>e.type==='summon'),false);assert.equal(tick(g,750,[hand(.5,1,true)]).events.some(e=>e.type==='summon'),true);});
+test('two complete pinches summon, a single pinch does not',()=>{const g=new GestureEngine();arm(g);tick(g,150,[hand(.5,.1)]);assert.equal(tick(g,250,[hand()]).events.some(e=>e.type==='summon'),false);tick(g,350,[hand()]);tick(g,400,[hand(.5,.1)]);assert.equal(tick(g,500,[hand()]).events.some(e=>e.type==='summon'),true);});
+test('closed hand entering frame cannot start a grab',()=>{const g=new GestureEngine();assert.equal(tick(g,0,[hand(.5,.1)],'model').events.some(e=>e.type==='pinch'),false);assert.equal(tick(g,100,[hand(.5,.1)],'model').hands[0].down,false);});
+test('one held pinch creates one event, not frame-count taps',()=>{const g=new GestureEngine();arm(g);const events=[];for(let t=150;t<800;t+=50)events.push(...tick(g,t,[hand(.5,.1)]).events);assert.equal(events.filter(e=>e.type==='pinch').length,1);assert.equal(events.filter(e=>e.type==='summon').length,0);});
+test('hysteresis prevents chatter near closed threshold',()=>{const g=new GestureEngine();arm(g);tick(g,150,[hand(.5,.1)],'model');for(let t=200;t<450;t+=50){const r=tick(g,t,[hand(.5,.32)],'model');assert.equal(r.hands[0].down,true);assert.equal(r.events.length,0);}assert.equal(tick(g,500,[hand(.5,.5)],'model').hands[0].down,false);});
+test('lost primary cancels and cannot count as second pinch',()=>{const g=new GestureEngine();arm(g);tick(g,150,[hand(.5,.1)]);tick(g,250,[hand()]);assert.ok(tick(g,300,[]).events.some(e=>e.type==='cancel'));arm(g,350);tick(g,500,[hand(.5,.1)]);assert.equal(tick(g,600,[hand()]).events.some(e=>e.type==='summon'),false);});
+test('detector hand-order swaps preserve track IDs',()=>{const g=new GestureEngine();const first=tick(g,0,[hand(.3),hand(.7)],'model').hands;const next=tick(g,100,[hand(.7),hand(.3)],'model').hands;assert.equal(next[0].id,first[0].id);assert.equal(next[0].x,.3);assert.equal(next[1].x,.7);});
+test('two-hand assignment retains both IDs when greedy nearest would lose one',()=>{const g=new GestureEngine();const first=tick(g,0,[hand(.3),hand(.5)],'model').hands;const next=tick(g,50,[hand(.44),hand(.1)],'model').hands;assert.deepEqual(next.map(h=>h.id),first.map(h=>h.id));assert.equal(next[0].x,.1);assert.equal(next[1].x,.44);});
+test('a long frame gap resets closed-state latch',()=>{const g=new GestureEngine();arm(g);tick(g,150,[hand(.5,.1)],'model');const r=tick(g,900,[hand(.5,.1)],'model');assert.equal(r.hands[0].down,false);});
+test('menu pinch never summons another menu',()=>{const g=new GestureEngine();arm(g);tick(g,150,[hand(.5,.1)],'menu');tick(g,250,[hand()],'menu');tick(g,350,[hand()],'menu');tick(g,400,[hand(.5,.1)],'menu');assert.equal(tick(g,500,[hand()],'menu').events.some(e=>e.type==='summon'),false);});

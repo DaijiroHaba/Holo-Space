@@ -1,0 +1,11 @@
+node_modules/
+test-results/
+tests/results/
+server.pid
+server.*.log
+.DS_Store
+*.mp4
+*.mov
+*.MOV
+audit/
+work/

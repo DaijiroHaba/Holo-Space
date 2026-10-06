@@ -1,0 +1,38 @@
+[
+  {
+    "file": "muscular.glb",
+    "url": "https://raw.githubusercontent.com/nqwrc/3d-anatomy/8ca3b7421bcfbe88b85859eb1983d5cf79f21749/public/models/muscular.glb",
+    "sha256": "F69ED1287F802A2D603D23293E01512BB57AE77EE7CCA1D5527BA00496E51DE2",
+    "bytes": 4503232
+  },
+  {
+    "file": "skeletal.glb",
+    "url": "https://raw.githubusercontent.com/nqwrc/3d-anatomy/8ca3b7421bcfbe88b85859eb1983d5cf79f21749/public/models/skeletal.glb",
+    "sha256": "C2B70B31DDEC4062CBC5BA969FC24ECFED61D00397A0BCA795E2701D997200F8",
+    "bytes": 1863828
+  },
+  {
+    "file": "visceral.glb",
+    "url": "https://raw.githubusercontent.com/nqwrc/3d-anatomy/8ca3b7421bcfbe88b85859eb1983d5cf79f21749/public/models/visceral.glb",
+    "sha256": "B21A0F34B3DA1BB0B6A9A6AE71D16FFBC036BEB504944AF2422D4B91A9317FE5",
+    "bytes": 1844996
+  },
+  {
+    "file": "cardiovascular.glb",
+    "url": "https://raw.githubusercontent.com/nqwrc/3d-anatomy/8ca3b7421bcfbe88b85859eb1983d5cf79f21749/public/models/cardiovascular.glb",
+    "sha256": "BC94C7B8EB1712F18EE461E064140E54AA817F3614E0F56A45B00E2A829CFB59",
+    "bytes": 5614112
+  },
+  {
+    "file": "joints.glb",
+    "url": "https://raw.githubusercontent.com/nqwrc/3d-anatomy/8ca3b7421bcfbe88b85859eb1983d5cf79f21749/public/models/joints.glb",
+    "sha256": "9FDAB1A257652597CF8F0B2AC93D12ABC817E8F9A9099B9628E764018490AFA2",
+    "bytes": 921960
+  },
+  {
+    "file": "License.txt",
+    "url": "https://raw.githubusercontent.com/nqwrc/3d-anatomy/8ca3b7421bcfbe88b85859eb1983d5cf79f21749/public/models/License.txt",
+    "sha256": "47C73BD1A7557F49FA5A2C02561CE6CA4AC0169066AB76FC6A6351835F5D185F",
+    "bytes": 1746
+  }
+]
