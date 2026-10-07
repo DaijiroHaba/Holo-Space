@@ -16,7 +16,7 @@ export function describeHand(points, aspect = 1) {
   const faceSign=Math.sign(normal.z)||1;
   const extendedPalmFingers=[[12,10],[16,14],[20,18]].filter(([tip,pip])=>distance(points[tip],points[0],aspect)>distance(points[pip],points[0],aspect)*1.1).length;
   const palmOpen=extendedPalmFingers>=2;
-  return {palmOpen,brakeCandidate:extendedPalmFingers<2,closedPalm:extendedPalmFingers===0,palmYaw:Math.atan2(normal.x*faceSign,Math.abs(normal.z)),palmPitch:Math.atan2(normal.y*faceSign,Math.abs(normal.z)),palmRoll:Math.atan2(-(points[9].x-points[0].x)*aspect,points[0].y-points[9].y),x:1-points[8].x,y:points[8].y,px:1-palm.reduce((n,i)=>n+points[i].x,0)/5,py:palm.reduce((n,i)=>n+points[i].y,0)/5,wx:1-points[0].x,wy:points[0].y,pinch,open:extended>=3&&pinch>.38,fist:extended===0&&pinch>.55,size,depthSize,depthQuality,depthShape:distance(points[5],points[17],aspect)/Math.max(.001,distance(points[0],points[9],aspect))};
+  return {extended,palmOpen,brakeCandidate:extendedPalmFingers<2,closedPalm:extendedPalmFingers===0,palmYaw:Math.atan2(normal.x*faceSign,Math.abs(normal.z)),palmPitch:Math.atan2(normal.y*faceSign,Math.abs(normal.z)),palmRoll:Math.atan2(-(points[9].x-points[0].x)*aspect,points[0].y-points[9].y),x:1-points[8].x,y:points[8].y,px:1-palm.reduce((n,i)=>n+points[i].x,0)/5,py:palm.reduce((n,i)=>n+points[i].y,0)/5,wx:1-points[0].x,wy:points[0].y,pinch,open:extended>=3&&pinch>.38,fist:extended===0&&pinch>.55,size,depthSize,depthQuality,depthShape:distance(points[5],points[17],aspect)/Math.max(.001,distance(points[0],points[9],aspect))};
 }
 export function containedPoint(x,y,videoWidth,videoHeight,width,height) {
   if (![x,y,videoWidth,videoHeight,width,height].every(Number.isFinite) || Math.min(videoWidth,videoHeight,width,height)<=0) return null;
