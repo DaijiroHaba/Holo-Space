@@ -38,7 +38,7 @@ export class RotationHandoff {
  }
  manual(mode,time){this.owner=null;this.prepare=null;this.brakeSince=null;this.readyHands.clear();this.armed=true;this.blockUntil=time+350;this.grabAfter=time+65;this.state=mode==='rotate'?'rotate':'fixed';}
  canGrab(h,time){return !!h&&!h.brakeCandidate&&this.readyHands.has(h.id)&&time>=this.grabAfter;}
- update(hands,events,time,{enabled=false,operation='place',owner=null,heldIds=[],uiBusy=false}={}){
+ update(hands,events,time,{enabled=false,operation='place',owner=null,heldIds=[],uiBusy=false,allowAutoStart=true}={}){
   const gap=this.last===null?0:time-this.last;this.last=time;
   if(!enabled){this.prepare=null;this.brakeSince=null;return {type:'none'};}
   const rotating=operation==='rotate',required=rotating?(owner!==null?[owner]:this.owner!==null?[this.owner]:[]):heldIds;
@@ -64,7 +64,7 @@ export class RotationHandoff {
    const neutral=hands.length===2&&hands.every(h=>!h.palmOpen||h.depthQuality<.5||h.py>.85);
    if(neutral){this.neutralSince??=time;if(time-this.neutralSince>=120)this.armed=true;}else this.neutralSince=null;
   }
-  const valid=this.armed&&time>=this.blockUntil&&!uiBusy&&!heldIds.length&&hands.length===2&&hands.every(h=>h.palmOpen&&!h.down&&h.pinch>=.55&&h.depthQuality>=.75&&h.px>.06&&h.px<.94&&h.py>.15&&h.py<.85&&!h.actionId&&h.hoverId!=='controls')&&Math.abs(hands[0].px-hands[1].px)>.12;
+  const valid=allowAutoStart&&this.armed&&time>=this.blockUntil&&!uiBusy&&!heldIds.length&&hands.length===2&&hands.every(h=>h.palmOpen&&!h.down&&h.pinch>=.55&&h.depthQuality>=.75&&h.px>.06&&h.px<.94&&h.py>.15&&h.py<.85&&!h.actionId&&h.hoverId!=='controls')&&Math.abs(hands[0].px-hands[1].px)>.12;
   if(!valid){this.prepare=null;return {type:'none'};}
   const ordered=[...hands].sort((a,b)=>a.id-b.id),key=ordered.map(h=>h.id).join(',');
   if(!this.prepare||this.prepare.key!==key||ordered.some((h,i)=>Math.hypot(h.px-this.prepare.points[i].x,h.py-this.prepare.points[i].y)>.025))this.prepare={key,since:time,points:ordered.map(h=>({x:h.px,y:h.py}))};
@@ -83,4 +83,40 @@ export function routeHandTargets(hands,{operation,owner=null,capture=false,palmB
   if(operation==='rotate')return {...h,actionId:palmBusy||h.id===owner?null:h.actionId,hoverId:null};
   return {...h,actionId:h.actionId,hoverId:operation==='inspect'&&h.hoverId!=='controls'&&!canGrab(h)?null:h.hoverId};
  });
+}
+
+export class OperatorGate{
+ constructor(){this.reset();}
+ reset(){this.mainSlot=null;this.body=null;this.anchor=null;this.lastSeen=null;this.blocked=false;this.state='waiting';}
+ update(hands,pose,time,{dual=false}={}){
+  const visible=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&(p.visibility??1)>=.55;
+  if(this.blocked){this.state='operator-reset';return [];}
+  if(!pose||![11,12].every(i=>visible(pose[i]))){if(this.body&&this.lastSeen!==null&&time-this.lastSeen>700)this.blocked=true;this.state=this.blocked?'operator-reset':'body-wait';return [];}
+  const center={x:(pose[11].x+pose[12].x)/2,y:(pose[11].y+pose[12].y)/2},width=Math.hypot(pose[11].x-pose[12].x,pose[11].y-pose[12].y);
+  if(width<.055){this.state='body-wait';return [];}
+  if(this.body&&(Math.hypot(center.x-this.body.x,center.y-this.body.y)>.14||width/this.body.width>1.7||width/this.body.width<.58)){this.blocked=true;this.state='operator-reset';return [];}
+  if(this.anchor&&Math.hypot(center.x-this.anchor.x,center.y-this.anchor.y)>.24){this.blocked=true;this.state='operator-reset';return [];}this.anchor??={...center};this.lastSeen=time;this.body={...center,width};const candidates=[];
+  for(const slot of ['Left','Right']){
+   const wrist=pose[slot==='Left'?15:16];if(!visible(wrist))continue;
+   const ranked=hands.map(h=>({h,cost:Math.hypot((1-h.wx)-wrist.x,h.wy-wrist.y)})).filter(v=>v.cost<Math.max(.075,width*.65)).sort((a,b)=>a.cost-b.cost);
+   if(ranked.length&&!(ranked[1]&&ranked[1].cost-ranked[0].cost<.015))candidates.push({...ranked[0].h,personSlot:slot,handLabel:slot});
+  }
+  if(candidates.length===2&&candidates[0].points===candidates[1].points){this.state='ambiguous';return [];}
+  if(!this.mainSlot){const choice=candidates.filter(h=>h.open&&!h.brakeCandidate).sort((a,b)=>b.size*(.5+b.depthQuality)-a.size*(.5+a.depthQuality))[0];if(choice)this.mainSlot=choice.personSlot;}
+  const main=candidates.find(h=>h.personSlot===this.mainSlot);
+  if(!main){this.state='main-wait';return [];}this.state=dual?'two-hands':'main';
+  return dual?[main,...candidates.filter(h=>h.personSlot!==this.mainSlot)].slice(0,2):[main];
+ }
+}
+export class ClapResetGate{
+ constructor(){this.reset();}
+ reset(){this.last=null;this.armed=false;this.approach=0;this.cooldown=0;}
+ update(hands,time,enabled,aspect=1){
+  if(!enabled||time<this.cooldown||hands.length!==2||hands.some(h=>h.down||!h.palmOpen)){this.last=null;this.armed=false;this.approach=0;return false;}
+  const d=Math.hypot((hands[0].px-hands[1].px)*aspect,hands[0].py-hands[1].py),size=(hands[0].size+hands[1].size)/2,apart=Math.max(.22,size*1.5),contact=Math.max(.055,size*.40);
+  const prev=this.last;this.last={d,time};if(!prev||time-prev.time>180){this.armed=d>apart;this.approach=0;return false;}
+  if(d>apart){this.armed=true;this.approach=0;}const speed=(prev.d-d)/Math.max(.001,(time-prev.time)/1000);
+  this.approach=speed>.25?this.approach+1:speed<-.1?0:this.approach;
+  if(this.armed&&this.approach>=2&&d<contact&&speed>.25){this.cooldown=time+1500;this.armed=false;this.last=null;return true;}return false;
+ }
 }

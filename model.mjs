@@ -82,7 +82,7 @@ export function createScene(container,onProgress=()=>{}){
       const i=instances[id];if(!i||!meta.ready)continue;
       // Independent projection magnification keeps 64x anatomy clear of the
       // near plane. XY compensation keeps each model's screen anchor fixed.
-      i.root.position.set(s.x/s.scale,s.y/s.scale,s.z);i.root.rotation.set(s.tilt,s.rotation,s.roll||0);i.root.updateMatrixWorld(true);
+      i.root.position.set(s.x/s.scale,s.y/s.scale,s.z);i.root.rotation.set(id==='panel'?0:s.tilt,id==='panel'?0:s.rotation,id==='panel'?0:s.roll||0);i.root.updateMatrixWorld(true);
       if(id!=='panel')applyLayer(i,s.layer);i.view.zoom=s.scale;i.view.aspect=camera.aspect;i.view.fov=camera.fov;i.view.updateProjectionMatrix();i.view.updateMatrixWorld(true);
       const glow=selected===id?(['drag','zoom','dual','dual-uncertain','dual-depth','inspect','inspect-uncertain','hold-one'].includes(phase)?'grab':'selected'):hovered===id?'hover':'none';
       if(i.glow!==glow){i.glow=glow;for(const m of i.materials)if(m.emissive){m.emissive.copy(m.userData.baseEmissive);if(glow!=='none')m.emissive.add(new THREE.Color(glow==='grab'?0x280928:glow==='selected'?0x201704:0x052020));}}

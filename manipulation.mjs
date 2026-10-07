@@ -1,4 +1,4 @@
-import {PalmDepthCue,applyDepth} from './depth-controller.mjs?v=0.11';
+import {PalmDepthCue,applyDepth} from './depth-controller.mjs?v=0.12';
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const angleDelta=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
 // One caller-owned object. Mode, hand count and identity changes rebase.
@@ -8,6 +8,7 @@ export class Manipulator {
  stop(){this.reset();this.stopped=true;}
  result(phase,state=null){return {phase,state,stopped:this.stopped};}
  update(hands,time,{state,key,aspect=1,worldPerX=8,worldPerY=5,enabled=true,operation='place',maxScale=64,minScale=.2}={}){
+  if(key==='panel'){state={...state,rotation:0,tilt:0,roll:0};operation=['dual','inspect'].includes(operation)?'inspect':operation==='depth'?'depth':'place';}
   if(!enabled||!key||!state){this.reset();return this.result('unselected');}
   if(this.stopped)return this.result('stopped');
   if(!hands.length){this.reset();return this.result('placed');}

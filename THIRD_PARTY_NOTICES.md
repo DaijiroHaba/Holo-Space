@@ -13,3 +13,8 @@ Anatomy assets use multiple upstream licenses. The selected distribution is nonc
 No user camera image, personal reference video, research data, or private audit log is included.
 
 Hand model license source: [Google model card](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Hand%20Tracking%20%28Lite_Full%29%20with%20Fairness%20Oct%202021.pdf), page 2.
+
+## Pose landmarker Lite
+Google MediaPipe / BlazePose GHUM 3D, Apache License 2.0 (vendor/LICENSE). Model card: https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf , page 2.
+Model: https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+SHA-256: 59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a
