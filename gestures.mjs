@@ -4,7 +4,7 @@ const distance = (a, b, aspect = 1) => Math.hypot((a.x-b.x)*aspect, a.y-b.y);
 export function describeHand(points, aspect = 1) {
   if (!Array.isArray(points) || points.length !== 21 || !points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return null;
   const size = Math.max(distance(points[0],points[9],aspect), distance(points[5],points[17],aspect));
-  if (size < .03) return null;
+  if (size < .012) return null;
   const extended = [[8,6],[12,10],[16,14],[20,18]].filter(([tip,pip]) => distance(points[tip],points[0],aspect)>distance(points[pip],points[0],aspect)*1.1).length;
   const pinch = distance(points[4],points[8],aspect)/size;
   const palm=[0,5,9,13,17];
@@ -89,3 +89,24 @@ export class GestureEngine {
 
 
 
+
+// ROI is sampled from raw video, never the rendered floor/model/overlay.
+export function handCropRects(pose,width,height,slot=null){
+ if(!Array.isArray(pose)||width<=0||height<=0)return [];
+ const valid=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&(p.visibility??1)>=.45;
+ if(!valid(pose[11])||!valid(pose[12]))return [];
+ const shoulder=Math.hypot((pose[11].x-pose[12].x)*width,(pose[11].y-pose[12].y)*height),side=Math.min(width,height,clamp(shoulder*1.7,Math.min(width,height)*.16,Math.min(width,height)*.5));
+ return [15,16].filter(i=>(!slot||i===(slot==='Left'?15:16))&&valid(pose[i])).map(i=>({left:clamp(pose[i].x*width-side/2,0,width-side),top:clamp(pose[i].y*height-side/2,0,height-side),width:side,height:side,wrist:i}));
+}
+export function remapHandResult(result,rect,width,height){
+ return {landmarks:(result.landmarks||[]).map(points=>points.map(p=>({...p,x:(rect.left+p.x*rect.width)/width,y:(rect.top+p.y*rect.height)/height,z:(p.z??0)*rect.width/width}))),handedness:result.handedness||[]};
+}
+export function mergeHandResults(results,width,height){
+ const output={landmarks:[],handedness:[]};
+ for(const result of results)for(const [i,points] of (result.landmarks||[]).entries()){
+  if(points.length!==21||!points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)))continue;
+  if(output.landmarks.some(old=>Math.hypot((old[0].x-points[0].x)*width,(old[0].y-points[0].y)*height)<Math.max(10,Math.min(width,height)*.02)))continue;
+  output.landmarks.push(points);output.handedness.push(result.handedness?.[i]||[]);
+ }
+ return output;
+}
