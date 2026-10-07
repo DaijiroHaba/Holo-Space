@@ -143,3 +143,11 @@ export class ClapResetGate{
   if(this.armed&&this.approach>=2&&d<contact&&speed>.25){this.cooldown=time+1500;this.armed=false;this.last=null;return true;}return false;
  }
 }
+
+// Initializers can stall on a model request or graphics backend. Close late tasks.
+export async function createTimedTask(factory,{timeoutMs=15000}={}){
+ let abandoned=false,timer;
+ const pending=Promise.resolve().then(factory).then(task=>{if(abandoned){task?.close?.();throw new Error('SupersededTask');}return task;});
+ try{return await Promise.race([pending,new Promise((_,reject)=>{timer=setTimeout(()=>{abandoned=true;const e=new Error('Recognition initialization timed out');e.name='RecognitionTimeout';reject(e);},timeoutMs);})]);}
+ finally{clearTimeout(timer);}
+}

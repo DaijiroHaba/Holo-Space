@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {createTimedTask} from '../interaction-flow.mjs';
+test('successful initializer returns task and does not close it',async()=>{let closed=0;const task={close(){closed++}};assert.equal(await createTimedTask(()=>Promise.resolve(task),{timeoutMs:100}),task);await new Promise(r=>setTimeout(r,120));assert.equal(closed,0);});
+test('stalled initializer times out and late GPU task is closed exactly once',async()=>{let resolve,closed=0;const task={close(){closed++}},late=new Promise(r=>resolve=r);await assert.rejects(createTimedTask(()=>late,{timeoutMs:15}),{name:'RecognitionTimeout'});resolve(task);await new Promise(r=>setTimeout(r,5));assert.equal(closed,1);});
+test('initializer rejection retains original error',async()=>{const e=new Error('backend');await assert.rejects(createTimedTask(()=>Promise.reject(e)),v=>v===e);});

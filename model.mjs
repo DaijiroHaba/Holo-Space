@@ -49,13 +49,16 @@ export function createScene(container,onProgress=()=>{}){
     const bounds=new THREE.Box3().setFromObject(base),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
     if(!Number.isFinite(size.y)||size.y<.1)throw new Error('Invalid anatomy bounds');
     const factor=3.45/size.y;base.scale.setScalar(factor);base.position.copy(center).multiplyScalar(-factor);
-    for(const id of ['single','muscle','skeleton','organs']){
-      const root=new THREE.Group(),anatomy=base.clone(true),materials=new Map();root.add(anatomy);root.visible=false;scene.add(root);
-      anatomy.traverse(o=>{if(!o.isMesh)return;const clone=m=>{if(!materials.has(m)){const c=m.clone();c.userData.baseEmissive=c.emissive?.clone()||new THREE.Color();materials.set(m,c);}return materials.get(m);};o.material=Array.isArray(o.material)?o.material.map(clone):clone(o.material);});
-      const view=camera.clone();instances[id]={root,anatomy,view,materials:[...materials.values()],layer:null,glow:null,bounds:null};
-    }
+    createAnatomyInstance('single');
     meta.ready=true;decoder.dispose();return meta;
   }).catch(e=>{meta.error=String(e.message||e);decoder.dispose();throw e;});
+  function createAnatomyInstance(id){
+      const root=new THREE.Group(),anatomy=base.clone(true),materials=new Map();root.add(anatomy);root.visible=false;scene.add(root);
+      anatomy.traverse(o=>{if(!o.isMesh)return;const clone=m=>{if(!materials.has(m)){const c=m.clone();c.userData.baseEmissive=c.emissive?.clone()||new THREE.Color();materials.set(m,c);}return materials.get(m);};o.material=Array.isArray(o.material)?o.material.map(clone):clone(o.material);});
+      const view=camera.clone();return instances[id]={root,anatomy,view,materials:[...materials.values()],layer:null,glow:null,bounds:null};
+  }
+  function setPerformanceMode(light){renderer.setPixelRatio(light?1:Math.min(devicePixelRatio,1.5));renderer.setSize(width,height);lastRenderKey='';}
+  function performanceInfo(){return {allocatedBodies:Object.keys(instances).filter(id=>id!=='panel').length,loadedTriangles:meta.triangles,loadedMeshes:meta.meshCount,pixelRatio:renderer.getPixelRatio(),drawCalls:renderer.info.render.calls,renderTriangles:renderer.info.render.triangles};}
   function resize(){width=Math.max(1,container.clientWidth);height=Math.max(1,container.clientHeight);renderer.setSize(width,height);}
   resize();
   function applyLayer(i,layer){
@@ -79,7 +82,7 @@ export function createScene(container,onProgress=()=>{}){
     for(const i of Object.values(instances))i.root.visible=false;
     room.visible=true;renderer.render(scene,camera);room.visible=false;
     for(const [id,s]of Object.entries(models).filter(([,s])=>s.visible).sort((a,b)=>a[1].z-b[1].z)){
-      const i=instances[id];if(!i||!meta.ready)continue;
+      const i=instances[id]||(meta.ready&&id!=='panel'?createAnatomyInstance(id):null);if(!i||!meta.ready)continue;
       // Independent projection magnification keeps 64x anatomy clear of the
       // near plane. XY compensation keeps each model's screen anchor fixed.
       i.root.position.set(s.x/s.scale,s.y/s.scale,s.z);i.root.rotation.set(id==='panel'?0:s.tilt,id==='panel'?0:s.rotation,id==='panel'?0:s.roll||0);i.root.updateMatrixWorld(true);
@@ -113,7 +116,7 @@ export function createScene(container,onProgress=()=>{}){
   }
   function motionScale(z,vw,vh){const h=2*(camera.position.z-z)*Math.tan(camera.fov*Math.PI/360),factor=Math.min(width/vw,height/vh);return {worldPerX:h*camera.aspect*vw*factor/viewport.width,worldPerY:h*vh*factor/viewport.height};}
   function getRenderState(){return {models:structuredClone(lastModels),selected:lastSelected,projection:projections(),independentMagnification:true,fixedView:true};}
-  return {ready,meta,render,resize,hit,panelActionAt,projections,motionScale,getRenderState,renderer};
+  return {ready,meta,render,resize,hit,panelActionAt,projections,motionScale,getRenderState,setPerformanceMode,performanceInfo,renderer};
 }
 
 
