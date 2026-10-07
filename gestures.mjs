@@ -24,17 +24,17 @@ export function containedPoint(x,y,videoWidth,videoHeight,width,height) {
   return {x:(width-videoWidth*scale)/2+x*videoWidth*scale,y:(height-videoHeight*scale)/2+y*videoHeight*scale};
 }
 export class GestureEngine {
-  constructor({graceMs=0}={}){this.graceMs=graceMs;this.reset();}
+  constructor({graceMs=0,persistent=false}={}){this.persistent=persistent;this.graceMs=graceMs;this.reset();}
   reset(){this.tracks=[];this.nextID=1;this.lastTime=null;this.lastRelease=null;this.summonAt=-Infinity;}
   update(observations,time,phase='model') {
     const events=[];
     if (!Number.isFinite(time)) return {hands:[],events};
-    if (this.lastTime!==null && (time<=this.lastTime || time-this.lastTime>300)) this.reset();
+    if (this.lastTime!==null && (time<=this.lastTime || !this.persistent&&time-this.lastTime>300)) this.reset();
     this.lastTime=time;
     const valid=observations.filter(h=>h&&[h.x,h.y,h.wx,h.wy,h.pinch].every(Number.isFinite)).slice(0,2);
     // Observation state never overrides tracker-owned latches.
     const remaining=valid.map(({id,down,armed,openSince,downSince,palmSince,missingSince,...observation})=>observation), next=[], retained=[];
-    const d=(a,b)=>a.handLabel&&b.handLabel&&a.handLabel!==b.handLabel?Infinity:Math.hypot(a.wx-b.wx,a.wy-b.wy);
+    const d=(a,b)=>this.persistent&&a.trackKey&&b.trackKey?(a.trackKey===b.trackKey?0:Infinity):a.handLabel&&b.handLabel&&a.handLabel!==b.handLabel?Infinity:Math.hypot(a.wx-b.wx,a.wy-b.wy);
     // A global two-hand assignment avoids detector array-order swaps.
     let old=[...this.tracks];
     // One visible hand must match the closest previous hand, not the first
@@ -52,7 +52,7 @@ export class GestureEngine {
     for(const t of old){
       let index=-1,best=.32;
       remaining.forEach((h,i)=>{const delta=d(t,h);if(delta<best){best=delta;index=i;}});
-      if(index<0){const missingSince=t.missingSince??time;if(time-missingSince<this.graceMs){retained.push({...t,missingSince});events.push({type:'missing',id:t.id});}else events.push({type:'lost',id:t.id});continue;}
+      if(index<0){const missingSince=t.missingSince??time;if(this.persistent||time-missingSince<this.graceMs){retained.push({...t,missingSince});events.push({type:'missing',id:t.id});}else events.push({type:'lost',id:t.id});continue;}
       const h=remaining.splice(index,1)[0];
       next.push({...t,...h});
     }
@@ -60,7 +60,7 @@ export class GestureEngine {
     if(this.tracks.length && ![...next,...retained].some(h=>h.id===this.tracks[0].id)){this.lastRelease=null;events.push({type:'cancel'});}
     this.tracks=[...next,...retained];
     for(const h of next){
-      if(h.missingSince!==undefined){events.push({type:'reacquired',id:h.id});delete h.missingSince;}
+      if(h.missingSince!==undefined){if(this.persistent&&time-h.missingSince>1200){h.down=false;h.armed=false;h.openSince=null;h.downSince=null;}events.push({type:'reacquired',id:h.id});delete h.missingSince;}
       const isPrimary=h===next[0];
       if(h.pinch>=.46){
         if(h.openSince===null) h.openSince=time;

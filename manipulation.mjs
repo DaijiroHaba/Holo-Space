@@ -3,7 +3,7 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const angleDelta=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
 // One caller-owned object. Mode, hand count and identity changes rebase.
 export class Manipulator {
- constructor(){this.reset();}
+ constructor({maxGapMs=200}={}){this.maxGapMs=maxGapMs;this.reset();}
  reset(){this.previous=null;this.time=null;this.velocity={x:0,y:0};this.coast=0;this.cues=new Map();this.depthLock=0;this.stopped=false;this.palmReadyAt=null;this.palmID=null;}
  stop(){this.reset();this.stopped=true;}
  result(phase,state=null){return {phase,state,stopped:this.stopped};}
@@ -14,7 +14,7 @@ export class Manipulator {
   if(!hands.length){this.reset();return this.result('placed');}
   if(operation!=='rotate'&&hands.every(h=>h.fist)){this.stop();return this.result('stopped');}
   const gap=this.time===null?0:time-this.time;
-  if(gap<=0||gap>200)this.reset();this.time=time;
+  if(gap<=0||gap>this.maxGapMs)this.reset();this.time=time;
   hands=[...hands].sort((a,b)=>String(a.id).localeCompare(String(b.id)));
   const closed=hands.filter(h=>h.down),h=hands.find(h=>h.id===this.palmID)||hands[0];
   if(operation==='rotate'){

@@ -1,7 +1,7 @@
-import {createScene} from './model.mjs?v=0.14';
-import {GestureEngine,describeHand,containedPoint,clamp,handCropRects,remapHandResult,mergeHandResults} from './gestures.mjs?v=0.14';
-import {Manipulator} from './manipulation.mjs?v=0.14';
-import {SummonGate,TapRouter,RotationHandoff,routeHandTargets,OperatorGate,ClapResetGate} from './interaction-flow.mjs?v=0.14';
+import {createScene} from './model.mjs?v=0.15';
+import {GestureEngine,describeHand,containedPoint,clamp,handCropRects,remapHandResult,mergeHandResults} from './gestures.mjs?v=0.15';
+import {Manipulator} from './manipulation.mjs?v=0.15';
+import {SummonGate,TapRouter,RotationHandoff,routeHandTargets,OperatorGate,ClapResetGate} from './interaction-flow.mjs?v=0.15';
 const $=id=>document.getElementById(id),lab=$('lab'),video=$('camera'),overlay=$('hand-overlay'),ctx=overlay.getContext('2d');
 const names={single:'人体模型',muscle:'筋肉',skeleton:'骨格',organs:'臓器',panel:'浮遊パネル'},layerNames={whole:'筋肉',skeleton:'骨格',organs:'臓器'};
 const base=(layer='whole',x=0,scale=1)=>({x,y:0,z:0,scale,rotation:-.15,tilt:0,roll:0,visible:true,layer});
@@ -9,7 +9,7 @@ const initial=()=>({single:base('whole',-.4),muscle:base('whole',-1.65,.78),skel
 let operationPaused=false,rotationProgress=0;
 let objects=initial(),compare=false,selected=null,hovered=null,phase='lobby',mode='preview',immersive=false,stage='lobby',menu=false,operation='place',lastBody='single';
 let stream=null,detector=null,detectorPromise=null,cameraToken=0,lastInference=0,lastVideoTime=-1,tracked=[],pointerDrag=null,grip=null,hoverButton=null,summonProgress=0,fistSince=null;
-const gesture=new GestureEngine({graceMs:180}),summon=new SummonGate(),tap=new TapRouter(),handoff=new RotationHandoff(),manipulator=new Manipulator();
+const gesture=new GestureEngine({graceMs:350,persistent:true}),summon=new SummonGate(),tap=new TapRouter(),handoff=new RotationHandoff(),manipulator=new Manipulator({maxGapMs:700});
 const operator=new OperatorGate(),clap=new ClapResetGate();let poseDetector=null,posePromise=null,poseLandmarks=null,lastPoseTime=-Infinity,mainId=null,rawHandCount=0,poseUnavailable=false,rescueDetector=null,rescuePromise=null,lastRescue=0,rescueHands=0,fullFrameHands=0;const rescueCanvas=document.createElement("canvas");rescueCanvas.width=rescueCanvas.height=384;const rescueContext=rescueCanvas.getContext("2d");
 const smoothing=new Map(),aims=new Map();let smoothTime=0,palmOwner=null,palmSample=null,palmQuietSince=0,scene,controlsDrag=null,controlsPointer=null,controlsPosition=null;
 const timing={rescueMs:[],poseMs:[],inferenceMs:[],intervalMs:[],updateMs:[]};const recordTime=(key,value)=>{timing[key].push(value);if(timing[key].length>180)timing[key].shift();};
@@ -27,7 +27,9 @@ function status(message){if($('status-text').textContent!==message)$('status-tex
 function setPhase(value,message){phase=value;$('phase-badge').textContent=badges[value]||value;status(message||hints[value]||hints.ready);}
 function cancelPointer(){if(pointerDrag){const id=pointerDrag.id;pointerDrag=null;try{if(scene.renderer.domElement.hasPointerCapture(id))scene.renderer.domElement.releasePointerCapture(id);}catch{}}}
 function releaseMotion(){manipulator.reset();palmOwner=null;palmSample=null;palmQuietSince=0;grip=null;controlsDrag=null;cancelPointer();}
-function resetInput(){if(stage==='workspace'&&selected!=='panel'&&(operation==='rotate'||grip)){if(['place','dual'].includes(operation))operationPaused=true;else{operation='inspect';operationPaused=false;}handoff.lock('tracking',performance.now());}gesture.reset();tap.reset();summon.reset();releaseMotion();tracked=[];smoothing.clear();aims.clear();smoothTime=0;hovered=null;fistSince=null;summonProgress=0;setHover(null);$('tap-cursor').hidden=true;}
+let inputSuspended=false,missingAt=null;
+function freezeInput(time){manipulator.reset();tap.reset();palmSample=null;handoff.brakeSince=null;inputSuspended=true;missingAt??=time;setPhase('reacquire',time-missingAt>1400?'手を元の位置付近で見せてください':'手を確認中');}
+function resetInput(){inputSuspended=false;missingAt=null;if(stage==='workspace'&&selected!=='panel'&&(operation==='rotate'||grip)){if(['place','dual'].includes(operation))operationPaused=true;else{operation='inspect';operationPaused=false;}handoff.lock('tracking',performance.now());}gesture.reset();tap.reset();summon.reset();releaseMotion();tracked=[];smoothing.clear();aims.clear();smoothTime=0;hovered=null;fistSince=null;summonProgress=0;setHover(null);$('tap-cursor').hidden=true;}
 function select(id,{preserveTap=false}={}){if(id==='panel'){objects.panel.rotation=objects.panel.tilt=objects.panel.roll=0;if(operation==='rotate')operation='place';}if(id&&(!activeIds().includes(id)||!objects[id].visible))return;selected=id;if(id&&id!=='panel')lastBody=id;releaseMotion();if(!preserveTap)tap.guard(performance.now());setPhase(id?'ready':'unselected');refresh();}
 function fixBody(time,reason){releaseMotion();const preserve=reason==='tracking'&&['place','dual'].includes(operation);if(!preserve)operation='inspect';operationPaused=preserve;handoff.lock(reason,time);tap.guard(time,65);rotationProgress=0;setPhase('fixed',preserve?'固定 / 選んだモードをタップして再開':undefined);refresh();}
 function stopMotion(){if(selected&&selected!=='panel'){fixBody(performance.now(),'stop');return;}operationPaused=true;releaseMotion();tap.reset();manipulator.stop();setPhase('stopped');refresh();}
@@ -51,7 +53,7 @@ function grabBounds(b){
  const pad=['dual','inspect'].includes(operation)?100:44;
  return {left:Math.max(10,Math.min(b.left-pad,(b.left+b.right)/2-160)),right:Math.min(lab.clientWidth-10,Math.max(b.right+pad,(b.left+b.right)/2+160)),top:Math.max(82,b.top-50),bottom:Math.min(lab.clientHeight-155,b.bottom+50)};
 }
-function bodyHit(p){if(['dual','inspect'].includes(operation)&&selected&&selected!=='panel'){const b=scene.projections()[selected];if(b?.visible){const r=grabBounds(b);if(p.x>=r.left&&p.x<=r.right&&p.y>=r.top&&p.y<=r.bottom)return selected;}}return scene.hit(p.x,p.y);}
+function bodyHit(p){if(['place','dual','inspect'].includes(operation)&&selected&&selected!=='panel'){const b=scene.projections()[selected];if(b?.visible){const r=grabBounds(b);if(p.x>=r.left&&p.x<=r.right&&p.y>=r.top&&p.y<=r.bottom)return selected;}}return scene.hit(p.x,p.y);}
 function actionableAt(p){
  const exact=document.elementFromPoint(p.x,p.y)?.closest('button[data-action]');if(exact&&!exact.disabled)return exact;
  const buttons=[...document.querySelectorAll('button[data-action]')].filter(b=>!b.disabled&&b.getClientRects().length&&(!menu||b.closest('#summon-menu,#safety-controls')));
@@ -96,21 +98,35 @@ function runAction(action,source='mouse'){
  }
  refresh();
 }
-function resetWorkspace(message='すべてリセット / 主操作手を3秒かざしてください'){releaseMotion();objects=initial();selected=null;lastBody='single';compare=false;stage='lobby';menu=false;operation='place';operationPaused=false;immersive=false;controlsPosition=null;lab.classList.remove('immersive');$('restore-ui').hidden=true;$('settings-panel').hidden=true;operator.reset();clap.reset();handoff.manual('place',performance.now());gesture.reset();tracked=[];mainId=null;summon.reset();summonProgress=0;rotationProgress=0;tap.guard(performance.now(),1000);smoothing.clear();aims.clear();$('tap-cursor').hidden=true;refresh();setPhase('lobby',message);}
+function resetWorkspace(message='すべてリセット / 主操作手を3秒かざしてください'){inputSuspended=false;missingAt=null;releaseMotion();objects=initial();selected=null;lastBody='single';compare=false;stage='lobby';menu=false;operation='place';operationPaused=false;immersive=false;controlsPosition=null;lab.classList.remove('immersive');$('restore-ui').hidden=true;$('settings-panel').hidden=true;operator.reset();clap.reset();handoff.manual('place',performance.now());gesture.reset();tracked=[];mainId=null;summon.reset();summonProgress=0;rotationProgress=0;tap.guard(performance.now(),1000);smoothing.clear();aims.clear();$('tap-cursor').hidden=true;refresh();setPhase('lobby',message);}
 function updateHands(time,result){
  const aspect=(video.videoWidth||1280)/(video.videoHeight||720),observations=(result.landmarks||[]).map((points,i)=>{const h=describeHand(points,aspect),side=result.handedness?.[i]?.[0];return h?{...h,points,handLabel:side?.score>=.8?side.categoryName:null}:null;});
  const dualMode=stage==='workspace'&&!menu&&['dual','inspect'].includes(operation)&&!operationPaused;
  rawHandCount=observations.filter(Boolean).length;
- const accepted=operator.update(observations.filter(Boolean),time-lastPoseTime<=400?poseLandmarks:null,time,{dual:dualMode,lobby:stage==='lobby'&&!menu});
+ const accepted=operator.update(observations.filter(Boolean),time-lastPoseTime<=400?poseLandmarks:null,time);
  const data=gesture.update(accepted,time,'model'),dt=smoothTime?Math.min(100,time-smoothTime):30;smoothTime=time;
  tracked=data.hands.map(h=>{const old=smoothing.get(h.id),alpha=old?1-Math.exp(-dt/18):1,v={px:old&&Math.abs(h.px-old.px)>.00015?old.px+(h.px-old.px)*alpha:h.px,py:old&&Math.abs(h.py-old.py)>.00015?old.py+(h.py-old.py)*alpha:h.py};smoothing.set(h.id,v);const p=point(h.x,h.y),handle=controlHandleAt(p);let button=handle?null:actionableAt(p),actionId=button?.dataset.action||(!handle&&!overControls(p)&&!menu&&stage==='workspace'?scene.panelActionAt(p.x,p.y):null);const aim=aims.get(h.id);if(data.events.some(e=>e.type==='pinch'&&e.id===h.id)&&!handle&&aim&&time-aim.time<240&&Math.hypot(h.px-aim.px,h.py-aim.py)<.07&&(!aim.button||(!aim.button.disabled&&aim.button.getClientRects().length>0))){button=aim.button;actionId=aim.actionId;}if(!h.down&&h.pinch>=.46&&actionId)aims.set(h.id,{time,px:h.px,py:h.py,button,actionId});return {...h,...v,button,actionId,hoverId:handle?'controls':!button&&!overControls(p)&&!menu&&stage==='workspace'?bodyHit(p):null};});
- mainId=tracked.find(h=>h.personSlot===operator.mainSlot)?.id??null;
+ mainId=gesture.tracks.find(h=>h.personSlot===operator.mainSlot)?.id??null;
+ tracked=tracked.map(h=>h.id===mainId?h:{...h,actionId:null,hoverId:null,button:null});
  if(clap.update(tracked,time,dualMode&&!grip&&!controlsDrag&&!pointerDrag&&!controlsPointer,aspect)){resetWorkspace('拍手でリセット / 手を3秒かざして再開');return;}
  for(const id of smoothing.keys())if(!tracked.some(h=>h.id===id)){smoothing.delete(id);aims.delete(id);}
- $('hand-count').textContent=mainId===null?'主操作手を待っています':dualMode?'主操作手＋補助手 '+tracked.length+'/2':'主操作手 1/1';$('operator-status').textContent=operator.handOnly&&!operator.blocked?'手のみ認識 / 一人で使用・肩を映して再設定推奨':operator.blocked?'操作者を選び直してください':rescueHands&&mainId!==null?'全身カメラ / 手首周辺を拡大して認識中':mainId===null?(rawHandCount?'手を検出 / 肩も映すか、片手だけ開いて保持':'手の検出なし / 明るい場所で手全体を映す'):dualMode?'両手モード / 拍手で全リセット':'主操作手だけを使用';hovered=tracked[0]?.hoverId||null;
- const g=summon.update(tracked,time,stage==='lobby'&&!menu);summonProgress=g.progress;$('summon-ring').style.strokeDashoffset=String(326.73*(1-g.progress));$('summon-number').textContent=g.progress?`${Math.max(1,Math.ceil(3-g.progress*3))}`:'3';$('summon-title').textContent=g.progress?'手を認識しています。そのまま…':'手を開いて、3秒かざす';
+ $('hand-count').textContent='追跡 '+tracked.length+'/2 手';$('operator-status').textContent=operator.state==='ambiguous'?'手を離して見せてください':!tracked.some(h=>h.id===mainId)?(missingAt!==null&&time-missingAt>1400?'手を元の位置付近へ':'手を確認中'):dualMode?'両手モード / 拍手で全リセット':'主操作手で操作 / 補助手も追跡中';hovered=tracked.find(h=>h.id===mainId)?.hoverId||null;
+ const g=summon.update(tracked.filter(h=>h.id===mainId),time,stage==='lobby'&&!menu);summonProgress=g.progress;$('summon-ring').style.strokeDashoffset=String(326.73*(1-g.progress));$('summon-number').textContent=g.progress?`${Math.max(1,Math.ceil(3-g.progress*3))}`:'3';$('summon-title').textContent=g.progress?'手を認識しています。そのまま…':'手を開いて、3秒かざす';
  if(g.ready){openMenu();return;}
- const flow=handoff.update(tracked,data.events,time,{enabled:!operationPaused&&stage==='workspace'&&!menu&&!!selected&&selected!=='panel'&&!pointerDrag&&!controlsPointer&&!controlsDrag,operation:operationPaused?'paused':operation,owner:operation==='rotate'?palmOwner??mainId:palmOwner,allowAutoStart:false,heldIds:grip?[...grip.ids.keys()]:[],uiBusy:!!tap.press});
+ // Actual releases end capture even when another hand is temporarily missing.
+ if(grip)for(const e of data.events)if(e.type==='release')grip.ids.delete(e.id);
+ if(grip&&!grip.ids.size){grip=null;manipulator.reset();}
+ const required=grip?[...grip.ids.keys()]:controlsDrag?[controlsDrag.id]:mainId!==null?[mainId]:[];
+ const absent=required.some(id=>!tracked.some(h=>h.id===id));
+ if(absent||operator.state==='ambiguous'){freezeInput(time);if(missingAt!==null&&time-missingAt>1200){grip=null;controlsDrag=null;}return;}
+ if(inputSuspended||data.events.some(e=>e.type==='reacquired'&&required.includes(e.id))){
+  manipulator.reset();tap.guard(time,80);palmSample=null;palmQuietSince=time;handoff.last=time;handoff.brakeSince=null;
+  if(controlsDrag){const h=tracked.find(h=>h.id===controlsDrag.id),r=$('mode-controls').getBoundingClientRect();if(h?.down)controlsDrag={id:h.id,px:h.px,py:h.py,x:r.left,y:r.top};else controlsDrag=null;}
+  if(grip)for(const id of grip.ids.keys())if(!tracked.find(h=>h.id===id)?.down)grip.ids.delete(id);
+  if(grip&&!grip.ids.size)grip=null;
+  inputSuspended=false;missingAt=null;setPhase('reacquire','手を確認 / この位置から再開');return;
+ }
+ const flow=handoff.update(tracked.filter(h=>dualMode||h.id===mainId),data.events,time,{enabled:!operationPaused&&stage==='workspace'&&!menu&&!!selected&&selected!=='panel'&&!pointerDrag&&!controlsPointer&&!controlsDrag,operation:operationPaused?'paused':operation,owner:operation==='rotate'?palmOwner??mainId:palmOwner,allowAutoStart:false,recoverable:true,heldIds:grip?[...grip.ids.keys()]:[],uiBusy:!!tap.press});
  rotationProgress=flow.progress||0;
  if(flow.type==='fixed'){fixBody(time,flow.reason);return;}
  if(flow.type==='braking'){manipulator.reset();tap.reset();setPhase('braking');return;}
@@ -132,7 +148,7 @@ function updateHands(time,result){
  const capture=!!grip||!!controlsDrag||palmMissing, palmBusy=operation==='rotate'&&palmOwner!==null&&time-palmQuietSince<180;
  const mainUi=operation==='rotate'&&!palmBusy&&tracked.find(h=>h.id===mainId)?.actionId;
  const routed=routeHandTargets(tracked,{operation:mainUi?'ui':operation,owner:palmOwner,capture,palmBusy,canGrab:h=>handoff.canGrab(h,time)}).map(h=>h.id===mainId?h:{...h,actionId:null,hoverId:null});
- const actions=tap.update(routed,capture?data.events.filter(e=>e.type!=='pinch'):data.events,time),uiPress=tap.press?.kind==='ui',primary=tracked.find(h=>h.id===tap.press?.id)||routed.find(h=>h.actionId)||tracked.find(h=>h.id===palmOwner)||tracked[0],p=primary?point(primary.x,primary.y):null;
+ const actions=tap.update(routed,capture?data.events.filter(e=>e.type!=='pinch'):data.events,time),uiPress=tap.press?.kind==='ui',primary=tracked.find(h=>h.id===tap.press?.id)||routed.find(h=>h.actionId)||tracked.find(h=>h.id===palmOwner)||tracked.find(h=>h.id===mainId),p=primary?point(primary.x,primary.y):null;
  setHover(operation==='rotate'&&primary?.id===palmOwner?null:primary?.button||null);hoverButton?.classList.toggle('hand-pressed',!!uiPress);
  $('tap-cursor').hidden=!p;if(p){$('tap-cursor').style.left=`${p.x}px`;$('tap-cursor').style.top=`${p.y}px`;$('tap-cursor').classList.toggle('pressed',!!primary.down);$('tap-cursor-label').textContent=operation==='rotate'&&primary.id===palmOwner?'掌で操作 / こぶしで固定':primary.pinch<.38&&!primary.down?'いったん指を開く':uiPress?'離すと決定':primary.actionId?'1回タップで選択':grip?'つかめています':primary.hoverId?'ここをつまんで移動':'枠内をつまむ';}
  for(const event of actions){
@@ -150,9 +166,9 @@ function updateHands(time,result){
  if(operationPaused){setPhase('stopped');return;}
  if(controlsDrag){const hand=tracked.find(h=>h.id===controlsDrag.id);if(!hand?.down){controlsDrag=null;setPhase('placed','操作パネルを配置しました');}else{const a=point(controlsDrag.px,controlsDrag.py),b=point(hand.px,hand.py);moveControls(controlsDrag.x+b.x-a.x,controlsDrag.y+b.y-a.y);setPhase('drag','操作パネルを移動中 / 離すと配置');}return;}
  if(grip&&data.events.some(e=>(e.type==='missing'||e.type==='reacquired')&&grip.ids.has(e.id))){manipulator.reset();setPhase('reacquire','手の追跡を待っています / 保持した配置を固定');return;}
- if(data.events.some(e=>e.type==='lost'||e.type==='cancel')){manipulator.reset();tap.reset();setPhase('reacquire');return;}
+ if(data.events.some(e=>e.id===mainId&&(e.type==='lost'||e.type==='cancel'))){manipulator.reset();tap.reset();setPhase('reacquire');return;}
 
- if(!['rotate','inspect'].includes(operation)&&!grip&&tracked.length===1&&primary.fist){fistSince??=time;releaseMotion();if(time-fistSince>=140)stopMotion();else setPhase('paused');return;}fistSince=null;
+ if(!['rotate','inspect'].includes(operation)&&!grip&&primary?.id===mainId&&primary.fist){fistSince??=time;releaseMotion();if(time-fistSince>=140)stopMotion();else setPhase('paused');return;}fistSince=null;
  if(palmMissing){manipulator.reset();setPhase('reacquire','同じ掌の復帰を待っています / 回転を固定');return;}
  if(!tracked.length){releaseMotion();setPhase(operation==='inspect'?'fixed':'placed');return;}
  if(!['rotate','inspect'].includes(operation)&&!grip&&primary.pinch<.38&&!primary.down){manipulator.reset();setPhase('pinch','つまみを認識 / 一度指を開いてから、枠内でつまんでください');return;}
@@ -160,7 +176,7 @@ function updateHands(time,result){
  if(!grip&&!palmBusy&&(uiPress||routed.some(h=>h.actionId)||operation!=='rotate'&&primary.hoverId==='controls')){manipulator.reset();setPhase('ui');return;}
  if(operation!=='rotate'&&!grip&&primary.down){manipulator.reset();setPhase(operation==='inspect'?'fixed':'pinch');return;}
  if(!grip&&(operation==='place'||operation==='dual'||operation==='inspect'||!selected)){if(!manipulator.stopped)manipulator.reset();setPhase(manipulator.stopped?'stopped':operation==='inspect'?'fixed':selected?'ready':'unselected');return;}
- const operating=grip?tracked.filter(h=>grip.ids.has(h.id)):operation==='rotate'?tracked.filter(h=>h.id===palmOwner):tracked;
+ const operating=grip?tracked.filter(h=>grip.ids.has(h.id)):operation==='rotate'?tracked.filter(h=>h.id===palmOwner):tracked.filter(h=>h.id===mainId);
  const outcome=manipulator.update(operating,time,{state:objects[selected],key:selected,aspect,...scene.motionScale(objects[selected].z,video.videoWidth||1280,video.videoHeight||720),operation,maxScale:selected==='panel'?3:64,minScale:selected==='panel'?.35:.2});
  if(outcome.state)objects[selected]=selected==='panel'?{...outcome.state,rotation:0,tilt:0,roll:0}:outcome.state;setPhase(outcome.phase,grip&&['dual','inspect'].includes(operation)&&grip.ids.size===1?[...grip.ids.values()][0]+'の手を保持 / もう片手は画面内でつまむ':undefined);
 }
@@ -169,13 +185,13 @@ function drawFeedback(){
  ctx.clearRect(0,0,overlay.width,overlay.height);
  if(!menu)for(const [id,b]of Object.entries(scene.projections())){
   if(!b.visible)continue;const chosen=selected===id,over=hovered===id,grabbing=grip?.target===id;const color=grabbing?'#fface5':chosen&&phase==='fixed'?'#a1d8ff':chosen?'#ffe1a0':over?'#97fff0':'#71b8ba';ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=chosen||over?2:1;
-  const bounds=['dual','inspect'].includes(operation)&&chosen?grabBounds(b):{left:Math.max(10,b.left-44),right:Math.min(overlay.width-10,b.right+44),top:Math.max(82,b.top-36),bottom:Math.min(overlay.height-155,b.bottom+36)};const {left:l,right:r,top:t,bottom:bot}=bounds,d=20;
+  const bounds=['place','dual','inspect'].includes(operation)&&chosen?grabBounds(b):{left:Math.max(10,b.left-44),right:Math.min(overlay.width-10,b.right+44),top:Math.max(82,b.top-36),bottom:Math.min(overlay.height-155,b.bottom+36)};const {left:l,right:r,top:t,bottom:bot}=bounds,d=20;
   if(r>l&&bot>t){ctx.globalAlpha=chosen||over?.5:.22;ctx.setLineDash([5,9]);ctx.strokeRect(l,t,r-l,bot-t);ctx.setLineDash([]);ctx.globalAlpha=1;ctx.shadowColor=color;ctx.shadowBlur=chosen||over?10:0;for(const [x,y,sx,sy]of[[l,t,1,1],[r,t,-1,1],[l,bot,1,-1],[r,bot,-1,-1]]){ctx.beginPath();ctx.moveTo(x+d*sx,y);ctx.lineTo(x,y);ctx.lineTo(x,y+d*sy);ctx.stroke();}}
   if(id!=='panel'&&['dual','inspect'].includes(operation)&&r>l&&bot>t){for(const x of [l,r]){ctx.beginPath();ctx.arc(x,(t+bot)/2,13,0,Math.PI*2);ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.arc(x,(t+bot)/2,4,0,Math.PI*2);ctx.fill();}}
   ctx.shadowBlur=0;ctx.font='12px "Yu Gothic UI",sans-serif';ctx.textAlign='center';ctx.fillText(`${label(id)} · ${grabbing?'つかめています':id==='panel'?'上の帯をつまんで移動':chosen&&operation==='rotate'?'掌を動かす・横向きで構え直し':'枠内をつまんで移動'}`,clamp((b.left+b.right)/2,100,overlay.width-100),clamp(t-12,82,overlay.height-172));ctx.restore();
  }
  for(const h of tracked){
-  if((operation==='rotate'||phase==='rotation-prepare')&&!menu&&(!h.actionId||h.id===palmOwner)&&!controlsDrag){
+  if(h.id===mainId&&(operation==='rotate'||phase==='rotation-prepare')&&!menu&&(!h.actionId||h.id===palmOwner)&&!controlsDrag){
    const p=point(h.px,h.py),active=h.id===palmOwner&&phase==='rotate',available=(h.palmOpen??h.open)&&h.depthQuality>=.6,color=active?'#fface5':available?'#78f6e4':'#ffe1a0';ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=active?20:10;ctx.lineWidth=active?4:2;if(rotationProgress){ctx.beginPath();ctx.arc(p.x,p.y,34,-Math.PI/2,-Math.PI/2+rotationProgress*Math.PI*2);ctx.stroke();}ctx.beginPath();ctx.ellipse(p.x,p.y,26,Math.max(9,26*h.depthQuality),h.palmRoll||0,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=.13;ctx.beginPath();for(const [j,i]of[0,5,9,13,17].entries()){const q=point(1-h.points[i].x,h.points[i].y);j?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y);}ctx.closePath();ctx.fill();ctx.globalAlpha=1;ctx.shadowBlur=0;ctx.font='12px "Yu Gothic UI"';ctx.fillText(operationPaused?'停止中 / モードで再開':phase==='rotation-prepare'?'回転準備':phase==='braking'?'ブレーキ':active?'回転中 / こぶしで固定':available?'掌を動かす / こぶしで固定':'構え直し・掌を正面へ',p.x+32,p.y);ctx.restore();continue;
   }
   const role=h.personSlot===operator.mainSlot?'主操作手':'補助手';
@@ -201,9 +217,7 @@ async function getRescueDetector(){
 function supplementHands(result,time){
  rescueHands=0;fullFrameHands=(result.landmarks||[]).length;const w=video.videoWidth,h=video.videoHeight;
  const existing=(result.landmarks||[]).map(p=>describeHand(p,w/h)).filter(Boolean);
- const wanted=stage==='workspace'&&['dual','inspect'].includes(operation)?2:1;
- if(existing.filter(v=>v.open||v.palmOpen||v.pinch<.38).length>=wanted)return result;
- const rects=handCropRects(poseLandmarks,w,h,wanted===1&&!operator.handOnly?operator.mainSlot:null);if(!rects.length)return result;
+ const rects=handCropRects(time-lastPoseTime<450?poseLandmarks:null,w,h).filter(rect=>{const wrist=poseLandmarks[rect.wrist];return !existing.some(v=>Math.hypot((1-v.wx-wrist.x)*w,(v.wy-wrist.y)*h)<rect.width*.22);});if(!rects.length)return result;
  if(!rescueDetector){if(time-lastRescue>2000||!lastRescue){lastRescue=time;void getRescueDetector();}return result;}
  const results=[result];for(const rect of rects){rescueContext.drawImage(video,rect.left,rect.top,rect.width,rect.height,0,0,384,384);try{const local=rescueDetector.detect(rescueCanvas);const mapped=remapHandResult(local,rect,w,h);rescueHands+=mapped.landmarks.length;results.push(mapped);}catch(e){console.warn('Supplementary hand inference skipped',e.name);}}
  return mergeHandResults(results,w,h);
@@ -227,7 +241,7 @@ function fitHandControls(){const lo=mode==='camera'?point(0,0):{x:0,y:80},hi=mod
 function frame(time){
  requestAnimationFrame(frame);
  if(mode==='camera'&&video.readyState>=2&&time-lastInference>=20&&video.currentTime!==lastVideoTime){recordTime('intervalMs',time-lastInference);lastInference=time;lastVideoTime=video.currentTime;try{const started=performance.now(),result=detector.detectForVideo(video,time),detected=performance.now();recordTime('inferenceMs',detected-started);if(poseDetector&&!poseUnavailable&&time-lastPoseTime>=(clap.armed?0:130)){const poseStart=performance.now();try{poseLandmarks=poseDetector.detectForVideo(video,time).landmarks?.[0]||null;}catch(e){poseUnavailable=true;poseLandmarks=null;console.warn('Pose inference unavailable',e.name);}recordTime('poseMs',performance.now()-poseStart);lastPoseTime=time;}const supplementaryStart=performance.now(),combined=supplementHands(result,time);recordTime('rescueMs',performance.now()-supplementaryStart);updateHands(time,combined);recordTime('updateMs',performance.now()-detected);}catch(e){cameraFailure('手の認識が中断しました。カメラを再開してください。');console.error(e);}}
- else if(mode==='camera'&&time-lastInference>350){resetInput();setPhase('paused','映像を待っています / 動きを停止して配置を保持');}
+ else if(mode==='camera'&&time-lastInference>Math.max(350,operator.interval*3)){freezeInput(time);}
  objects.panel.rotation=objects.panel.tilt=objects.panel.roll=0;fitHandControls();scene.render(activeObjects(),selected,phase,hovered);drawFeedback();
  const s=selected?objects[selected]:null;$('scale-value').textContent=s?`${s.scale.toFixed(2)} ×`:'—';$('depth-value').textContent=s?(Math.abs(s.z)<.05?'基準位置':`${s.z<0?'奥':'手前'} ${Math.abs(s.z).toFixed(1)}`):'—';
 }
@@ -247,7 +261,7 @@ addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))retu
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&(mode==='camera'||mode==='loading'))stopCamera();});addEventListener('pagehide',()=>{stream?.getTracks().forEach(t=>t.stop());detector?.close();});
 scene.ready.then(()=>{$('model-loading').hidden=true;$('start').disabled=false;status('カメラで手を3秒かざす / マウスならメニューを開く');}).catch(e=>{$('model-loading').querySelector('strong').textContent='解剖モデルを読み込めませんでした';$('model-progress').textContent='起動用ファイルから再読み込みしてください';console.error(e);});
 refresh();requestAnimationFrame(frame);
-Object.defineProperty(window,'holoSnapshot',{value:()=>({version:'0.14',mode,stage,menu,compare,selected,hovered,phase,operation,immersive,summonProgress,palmOwner,rotationProgress,handoffState:handoff.state,handoffReason:handoff.reason,gripping:grip?.target||(controlsDrag?'controls':null),controlsPosition:controlsPosition?{...controlsPosition}:null,objects:structuredClone(objects),stopped:operationPaused||manipulator.stopped,anatomy:{...scene.meta},trackedHands:tracked.length,handFeedback:tracked.map(h=>({id:h.id,pinched:h.down,armed:h.armed,hoverId:h.hoverId,actionId:h.actionId,grabbed:!!grip?.ids.has(h.id)&&h.down,palmFeedback:operation==='rotate'&&h.id===palmOwner,heldSide:grip?.ids.get(h.id)||null})),tapTarget:tap.press?{kind:tap.press.kind,target:tap.press.target}:null,cameraActive:!!stream,detectorReady:!!detector,rawHandCount,poseUnavailable,fullFrameHands,rescueHands,rescueReady:!!rescueDetector,operator:{state:operator.state,mainSlot:operator.mainSlot,mainId,blocked:operator.blocked,poseReady:!!poseLandmarks,handOnly:operator.handOnly},timing:Object.fromEntries(Object.entries(timing).map(([k,v])=>{const a=[...v].sort((a,b)=>a-b);return [k,{samples:a.length,median:a[Math.floor(a.length*.5)]||0,p95:a[Math.floor(a.length*.95)]||0}];})),renderSpace:scene.getRenderState()}),writable:false});
+Object.defineProperty(window,'holoSnapshot',{value:()=>({version:'0.15',mode,stage,menu,compare,selected,hovered,phase,operation,immersive,summonProgress,palmOwner,rotationProgress,handoffState:handoff.state,handoffReason:handoff.reason,gripping:grip?.target||(controlsDrag?'controls':null),controlsPosition:controlsPosition?{...controlsPosition}:null,objects:structuredClone(objects),inputSuspended,stopped:inputSuspended||operationPaused||manipulator.stopped,anatomy:{...scene.meta},trackedHands:tracked.length,handFeedback:tracked.map(h=>({id:h.id,pinched:h.down,armed:h.armed,hoverId:h.hoverId,actionId:h.actionId,grabbed:!!grip?.ids.has(h.id)&&h.down,palmFeedback:operation==='rotate'&&h.id===palmOwner,heldSide:grip?.ids.get(h.id)||null})),tapTarget:tap.press?{kind:tap.press.kind,target:tap.press.target}:null,cameraActive:!!stream,detectorReady:!!detector,rawHandCount,poseUnavailable,fullFrameHands,rescueHands,rescueReady:!!rescueDetector,operator:{state:operator.state,mainSlot:operator.mainSlot,mainId,blocked:operator.blocked,poseReady:!!poseLandmarks,handOnly:operator.handOnly,reason:operator.reason,roles:Object.keys(operator.roles),intervalMs:operator.interval},timing:Object.fromEntries(Object.entries(timing).map(([k,v])=>{const a=[...v].sort((a,b)=>a-b);return [k,{samples:a.length,median:a[Math.floor(a.length*.5)]||0,p95:a[Math.floor(a.length*.95)]||0}];})),renderSpace:scene.getRenderState()}),writable:false});
 
 
 

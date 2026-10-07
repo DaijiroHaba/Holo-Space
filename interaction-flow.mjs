@@ -1,11 +1,13 @@
 // Interaction routing is independent of anatomy and DOM. Targets are stable IDs.
 export class SummonGate {
  constructor(){this.reset();}
- reset(){this.id=null;this.since=null;this.last=null;}
+ reset(){this.id=null;this.since=null;this.last=null;this.absentAt=null;}
  update(hands,time,enabled){
   if(!enabled){this.reset();return {progress:0,ready:false};}
   const h=hands.find(h=>h.open&&!h.down&&!h.fist);
-  if(!h||this.last!==null&&(time<=this.last||time-this.last>250)){this.reset();if(!h)return {progress:0,ready:false};}
+  if(!h)this.absentAt??=time;else this.absentAt=null;
+  if(!h&&this.last!==null&&time-this.absentAt<350){if(this.since!==null)this.since+=Math.max(0,time-this.last);this.last=time;return {progress:Math.min(1,(time-this.since)/3000),ready:false};}
+  if(!h||this.last!==null&&(time<=this.last||time-this.last>900)){this.reset();if(!h)return {progress:0,ready:false};}
   if(this.id!==h.id||this.since===null){this.id=h.id;this.since=time;}this.last=time;
   const progress=Math.min(1,(time-this.since)/3000);return {progress,ready:progress===1,id:h.id};
  }
@@ -16,7 +18,7 @@ export class TapRouter {
  guard(time,duration=300){this.reset();this.blockUntil=time+duration;}
  update(hands,events,time){
   const output=[];
-  if(this.lastTime!==null&&(time<=this.lastTime||time-this.lastTime>300))this.reset();this.lastTime=time;
+  if(this.lastTime!==null&&(time<=this.lastTime||time-this.lastTime>1200))this.reset();this.lastTime=time;
   if(this.press){const owner=hands.find(h=>h.id===this.press.id);if(!owner||events.some(e=>e.type==='lost'&&e.id===this.press.id))this.press=null;else this.press.travel=Math.max(this.press.travel,Math.hypot(owner.px-this.press.px,owner.py-this.press.py));}
   // A second visible hand never cancels the owning hand's tap. UI owns input
   // before any underlying object; one complete pinch/release executes once.
@@ -38,11 +40,11 @@ export class RotationHandoff {
  }
  manual(mode,time){this.owner=null;this.prepare=null;this.brakeSince=null;this.readyHands.clear();this.armed=true;this.blockUntil=time+350;this.grabAfter=time+65;this.state=mode==='rotate'?'rotate':'fixed';}
  canGrab(h,time){return !!h&&!h.brakeCandidate&&this.readyHands.has(h.id)&&time>=this.grabAfter;}
- update(hands,events,time,{enabled=false,operation='place',owner=null,heldIds=[],uiBusy=false,allowAutoStart=true}={}){
+ update(hands,events,time,{enabled=false,operation='place',owner=null,heldIds=[],uiBusy=false,allowAutoStart=true,recoverable=false}={}){
   const gap=this.last===null?0:time-this.last;this.last=time;
   if(!enabled){this.prepare=null;this.brakeSince=null;return {type:'none'};}
   const rotating=operation==='rotate',required=rotating?(owner!==null?[owner]:this.owner!==null?[this.owner]:[]):heldIds;
-  if(required.length&&(gap>200||required.some(id=>!hands.some(h=>h.id===id))||events.some(e=>required.includes(e.id)&&['missing','lost','reacquired'].includes(e.type))))return this.lock('tracking',time);
+  if(required.length&&(gap>(recoverable?700:200)||required.some(id=>!hands.some(h=>h.id===id))||events.some(e=>required.includes(e.id)&&['missing','lost','reacquired'].includes(e.type)))){if(recoverable){this.brakeSince=null;return {type:'rebase',reason:'tracking'};}return this.lock('tracking',time);}
   for(const h of hands){if(h.brakeCandidate)this.readyHands.delete(h.id);else if(!h.down&&h.pinch>=.46)this.readyHands.add(h.id);}
   if(rotating){
    this.state='rotate';this.prepare=null;
@@ -85,41 +87,44 @@ export function routeHandTargets(hands,{operation,owner=null,capture=false,palmB
  });
 }
 
-export class OperatorGate{
+// Ephemeral role continuity, not biometric/person identification. Pose is a hint.
+export class OperatorGate {
  constructor(){this.reset();}
- reset(){this.mainSlot=null;this.body=null;this.anchor=null;this.lastSeen=null;this.blocked=false;this.state='waiting';this.handOnly=false;this.candidate=null;this.lastHand=null;}
- update(hands,pose,time,{dual=false,lobby=false}={}){
-  const visible=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&(p.visibility??1)>=.55;
-  if(lobby&&this.blocked)this.reset();
-  if(this.blocked){this.state='operator-reset';return [];}
-  if(this.handOnly)return this.updateHandOnly(hands,time,dual);
-  if(!this.mainSlot){const eligible=hands.filter(h=>h.open&&!h.brakeCandidate&&h.handLabel);if(eligible.length===1){const h=eligible[0];if(!this.candidate||time-this.candidate.last>250||this.candidate.label!==h.handLabel||Math.hypot(h.wx-this.candidate.x,h.wy-this.candidate.y)>.1)this.candidate={label:h.handLabel,x:h.wx,y:h.wy,since:time,last:time};this.candidate.last=time;if(time-this.candidate.since>=700){this.handOnly=true;this.mainSlot=h.handLabel;this.lastSeen=null;return this.updateHandOnly(hands,time,dual);}}else this.candidate=null;}
-  if(!pose||![11,12].every(i=>visible(pose[i]))){if(this.mainSlot&&!lobby&&this.body&&this.lastSeen!==null&&time-this.lastSeen>700)this.blocked=true;this.state=this.blocked?'operator-reset':'body-wait';return [];}
-  const center={x:(pose[11].x+pose[12].x)/2,y:(pose[11].y+pose[12].y)/2},width=Math.hypot(pose[11].x-pose[12].x,pose[11].y-pose[12].y);
-  if(width<.055){this.state='body-wait';return [];}
-  if(this.mainSlot&&!lobby&&this.body&&(Math.hypot(center.x-this.body.x,center.y-this.body.y)>.14||width/this.body.width>1.7||width/this.body.width<.58)){this.blocked=true;this.state='operator-reset';return [];}
-  if(this.mainSlot&&!lobby&&this.anchor&&Math.hypot(center.x-this.anchor.x,center.y-this.anchor.y)>.24){this.blocked=true;this.state='operator-reset';return [];}if(lobby||!this.mainSlot)this.anchor={...center};else this.anchor??={...center};this.lastSeen=time;this.body={...center,width};const candidates=[];
-  for(const slot of ['Left','Right']){
-   const wrist=pose[slot==='Left'?15:16];if(!visible(wrist))continue;
-   const ranked=hands.map(h=>({h,cost:Math.hypot((1-h.wx)-wrist.x,h.wy-wrist.y)})).filter(v=>v.cost<Math.max(.075,width*.65)).sort((a,b)=>a.cost-b.cost);
-   if(ranked.length&&!(ranked[1]&&ranked[1].cost-ranked[0].cost<.015))candidates.push({...ranked[0].h,personSlot:slot,handLabel:slot});
-  }
-  if(candidates.length===2&&candidates[0].points===candidates[1].points){this.state='ambiguous';return [];}
-  if(!this.mainSlot){const choice=candidates.filter(h=>h.open&&!h.brakeCandidate).sort((a,b)=>b.size*(.5+b.depthQuality)-a.size*(.5+a.depthQuality))[0];if(choice)this.mainSlot=choice.personSlot;}
-  const main=candidates.find(h=>h.personSlot===this.mainSlot);
-  if(!main){this.state='main-wait';return [];}this.state=dual?'two-hands':'main';
-  return dual?[main,...candidates.filter(h=>h.personSlot!==this.mainSlot)].slice(0,2):[main];
+ reset(){this.roles={};this.mainSlot=null;this.blocked=false;this.state='waiting';this.handOnly=false;this.candidate=null;this.reason='initial';this.initialCandidate=null;this.last=null;this.interval=33;}
+ poseCost(h,pose){return Math.min(...[15,16].map(i=>{const p=pose?.[i];return p&&(p.visibility??1)>.45?Math.hypot(1-h.wx-p.x,h.wy-p.y):1;}));}
+ cost(t,h,time,pose){
+  const gap=time-t.time,dt=Math.min(160,gap)/1000,px=t.wx+t.vx*dt,py=t.wy+t.vy*dt;
+  const d=Math.hypot(h.wx-px,h.wy-py),limit=gap>1400?.23:Math.min(.34,.13+gap*.0006);
+  const supportedAux=t.role==='aux'&&gap>1400&&time-(this.roles.main?.time??-Infinity)<150&&d<.55&&this.poseCost(h,pose)<.06&&h.handLabel&&h.handLabel===t.label;
+  if(d>limit&&!supportedAux)return Infinity;
+  return (supportedAux?Math.min(d,.18):d)+Math.min(.12,Math.max(0,gap-100)*.0002)+Math.min(.06,Math.abs(Math.log(Math.max(.001,h.size)/t.size))*.025)+(h.handLabel&&t.label&&h.handLabel!==t.label?.08:0)+Math.min(.015,this.poseCost(h,pose)*.025);
  }
- updateHandOnly(hands,time,dual){
-  const ranked=hands.filter(h=>h.handLabel===this.mainSlot).map(h=>({h,d:this.lastHand?Math.hypot(h.wx-this.lastHand.wx,h.wy-this.lastHand.wy):0})).sort((a,b)=>a.d-b.d);
-  if(this.lastSeen!==null&&time-this.lastSeen>700){this.blocked=true;this.state='operator-reset';return [];}
-  if(!ranked.length||ranked[0].d>.28||(ranked[1]&&ranked[1].d-ranked[0].d<.04)){this.state='hand-only-wait';return [];}
-  const main={...ranked[0].h,personSlot:this.mainSlot};this.lastSeen=time;this.lastHand={wx:main.wx,wy:main.wy};this.state='hand-only';
-  if(!dual)return [main];
-  const aux=hands.filter(h=>h.handLabel&&h.handLabel!==this.mainSlot&&Math.hypot(h.wx-main.wx,h.wy-main.wy)<.65);
-  return aux.length===1?[main,{...aux[0],personSlot:aux[0].handLabel}]:[main];
+ save(role,h,time){const old=this.roles[role],dt=old?Math.max(.02,(time-old.time)/1000):1;this.roles[role]={role,wx:h.wx,wy:h.wy,size:Math.max(.001,h.size),label:h.handLabel,time,vx:old?Math.max(-.7,Math.min(.7,(h.wx-old.wx)/dt)):0,vy:old?Math.max(-.7,Math.min(.7,(h.wy-old.wy)/dt)):0};return {...h,personSlot:role,trackKey:role};}
+ update(hands,pose,time){
+  if(this.last!==null&&time>this.last)this.interval=.85*this.interval+.15*Math.min(500,time-this.last);this.last=time;this.handOnly=!pose;
+  const hs=hands.filter(h=>h&&[h.wx,h.wy,h.size].every(Number.isFinite));
+  if(!this.mainSlot){const eligible=hs.filter(h=>h.open&&!h.brakeCandidate).sort((a,b)=>this.poseCost(a,pose)-this.poseCost(b,pose)||b.size-a.size);if(!eligible.length){this.initialCandidate=null;this.state='waiting';return [];}const first=eligible[0];const c=this.initialCandidate;if(!c||time-c.last>700||Math.hypot(first.wx-c.x,first.wy-c.y)>.07){this.initialCandidate={x:first.wx,y:first.wy,since:time,last:time};this.state='waiting';return [];}c.last=time;if(time-c.since<120)return [];this.mainSlot='main';this.save('main',first,time);this.initialCandidate=null;}
+  const roles=Object.keys(this.roles),options=[];
+  const walk=(i,used,pairs,total)=>{if(i===roles.length){options.push({pairs,total});return;}const role=roles[i];walk(i+1,used,pairs,total+.42);for(let j=0;j<hs.length;j++){if(used.has(j))continue;const c=this.cost(this.roles[role],hs[j],time,pose);if(Number.isFinite(c))walk(i+1,new Set([...used,j]),[...pairs,[role,j]],total+c);}};
+  walk(0,new Set(),[],0);options.sort((a,b)=>a.total-b.total);const best=options[0];
+  if(options[1]&&options[1].total-best.total<.022){this.state='ambiguous';this.reason='competing-hands';return [];}
+  // When wrists overlap, suspend assignment; keep previous roles and velocity.
+  if(best.pairs.length===2){const [x,y]=best.pairs.map(([,j])=>hs[j]);if(Math.hypot(x.wx-y.wx,x.wy-y.wy)<.045){this.state='ambiguous';this.reason='overlap';return [];}}
+  const out=[],used=new Set();
+  for(const [role,j] of best.pairs){const h=hs[j],old=this.roles[role];used.add(j);
+   if(time-old.time>1400){const c=old.recovery;if(!c||Math.hypot(h.wx-c.x,h.wy-c.y)>.045){old.recovery={x:h.wx,y:h.wy,since:time};continue;}if(time-c.since<Math.max(180,Math.min(350,this.interval*2)))continue;}
+   out.push(this.save(role,h,time));
+  }
+  if(!this.roles.aux&&out.some(h=>h.personSlot==='main')){
+   const main=out.find(h=>h.personSlot==='main');const candidates=hs.map((h,j)=>({h,j})).filter(({h,j})=>!used.has(j)&&Math.hypot(h.wx-main.wx,h.wy-main.wy)>.08&&Math.hypot(h.wx-main.wx,h.wy-main.wy)<.7);
+   const supported=candidates.filter(({h})=>this.poseCost(h,pose)<.1),pool=supported.length?supported:candidates;
+   if(pool.length===1){const {h}=pool[0];if(!this.candidate||Math.hypot(h.wx-this.candidate.x,h.wy-this.candidate.y)>.08)this.candidate={x:h.wx,y:h.wy,since:time};if(time-this.candidate.since>=120){out.push(this.save('aux',h,time));this.candidate=null;}}else this.candidate=null;
+  }
+  this.state=out.some(h=>h.personSlot==='main')?(out.length===2?'two-hands':'main'):'confirming';this.reason=this.state==='confirming'?'main-missing':'continuous';
+  return out.sort((a,b)=>a.personSlot==='main'?-1:b.personSlot==='main'?1:0);
  }
 }
+
 export class ClapResetGate{
  constructor(){this.reset();}
  reset(){this.last=null;this.armed=false;this.approach=0;this.cooldown=0;this.nearAt=null;}
