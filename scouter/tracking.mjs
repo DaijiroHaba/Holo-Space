@@ -1,0 +1,13 @@
+export const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+export function iou(a,b){const w=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x)),h=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y)),s=w*h;return s/(a.w*a.h+b.w*b.h-s||1);}
+export function cleanDetections(ds){const valid=ds.filter(b=>['x','y','w','h','score'].every(k=>Number.isFinite(b[k]))&&b.w>.012&&b.h>.018&&b.score>=.35).map(b=>{const x=clamp(b.x,0,1),y=clamp(b.y,0,1);return {...b,x,y,w:clamp(b.w,0,1-x),h:clamp(b.h,0,1-y)};}).filter(b=>b.w>.012&&b.h>.018).sort((a,b)=>b.score-a.score||a.x-b.x);const kept=[];for(const b of valid)if(!kept.some(a=>iou(a,b)>(b.face?.45:.72)))kept.push(b);return kept.slice(0,20);}
+export class PersonTracker {
+ constructor(profileFactory,{max=10,holdMs=1800}={}){this.profileFactory=profileFactory;this.max=max;this.holdMs=holdMs;this.nextId=1;this.tracks=[];}
+ clear(){this.tracks=[];}
+ reroll(){for(const t of this.tracks)t.profile=this.profileFactory();}
+ update(input,now){const ds=cleanDetections(input);this.tracks=this.tracks.filter(t=>now-t.seen<=this.holdMs);const pairs=[];for(const t of this.tracks){const dt=clamp((now-t.seen)/1000,0,.3),p={...t.box,x:t.box.x+t.vx*dt,y:t.box.y+t.vy*dt};for(let j=0;j<ds.length;j++){const b=ds[j],dist=Math.hypot(p.x+p.w/2-b.x-b.w/2,p.y+p.h/2-b.y-b.h/2),over=iou(p,b),ratio=Math.max(p.h/b.h,b.h/p.h);if(ratio<2.1&&dist<.19&&(over>.03||dist<.07))pairs.push({t,j,cost:1-over+dist*2});}}
+ pairs.sort((a,b)=>a.cost-b.cost||a.t.id-b.t.id);const usedT=new Set(),usedD=new Set();for(const p of pairs){if(usedT.has(p.t.id)||usedD.has(p.j))continue;const competing=pairs.find(q=>q.j===p.j&&q.t!==p.t&&!usedT.has(q.t.id)&&Math.abs(q.cost-p.cost)<.035);if(competing){usedD.add(p.j);continue;}const t=p.t,b=ds[p.j],dt=Math.max(.04,(now-t.seen)/1000),a=1-Math.exp(-dt/.1);t.vx=clamp((b.x-t.box.x)/dt,-.4,.4);t.vy=clamp((b.y-t.box.y)/dt,-.4,.4);for(const k of ['x','y','w','h'])t.box[k]+=(b[k]-t.box[k])*a;t.seen=now;t.hits++;usedT.add(t.id);usedD.add(p.j);}
+ for(let j=0;j<ds.length&&this.tracks.length<this.max;j++){if(usedD.has(j))continue;const b=ds[j];if(this.tracks.some(t=>iou(t.box,b)>.22))continue;this.tracks.push({id:this.nextId++,box:{...b},born:now,seen:now,hits:1,vx:0,vy:0,profile:this.profileFactory()});}return this.current(now);}
+ current(now){return this.tracks.filter(t=>now-t.seen<=this.holdMs&&t.hits>=2&&now-t.born>=250).map(t=>({...t,missing:now-t.seen>400}));}
+}
+export function demoDetections(count,time){return Array.from({length:count},(_,i)=>{const cols=count<=5?count:5,rows=Math.ceil(count/cols),row=Math.floor(i/cols);return {x:.06+(i%cols)*(.88/cols)+Math.sin(time*.0007+i)*.008,y:(rows===1?.18:.08+row*.43),w:.75/cols,h:rows===1?.68:.38,score:.99};});}
