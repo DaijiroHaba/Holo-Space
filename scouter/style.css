@@ -3,3 +3,28 @@
 .profile-type{display:block;font-size:10px;color:#b3cf9f;margin-bottom:8px}.person-card{min-height:170px}#pairs{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}#pairs article{padding:15px;background:#111b14;border:1px solid #2c3c2b;border-radius:3px}#pairs small{font:10px monospace;color:#acd08c;display:block;margin-bottom:8px}#pairs strong{font-size:13px;font-weight:500}#pairs p{color:#93ab98;font-size:11px;line-height:1.7;margin:8px 0 0}#detail-quirk{background:#203323;padding:14px;border-left:2px solid #c8ff80;font-size:13px}
 
 #spotlight{position:absolute;right:18px;bottom:64px;z-index:4;width:280px;max-width:66%;padding:14px 16px;background:#0b190ff0;border:1px solid #608447;border-left:3px solid #c8ff80;pointer-events:none}#spotlight small{font:10px monospace;color:#b2d791}#spotlight h3{font-size:16px;margin:9px 0 7px;color:#e5f6d9;font-weight:550}#spotlight p{font-size:12px;line-height:1.7;color:#c5d5bd;margin:0}#spotlight-pair{display:block;font-size:10px;color:#9ab58e;margin-top:9px}@media(max-width:600px){#spotlight{bottom:60px;right:10px;padding:10px 12px;width:230px}#spotlight h3{font-size:13px}#spotlight p{font-size:10px}#spotlight-pair{display:none}}
+
+/* Fullscreen is a camera-first HUD, rather than a larger document page. */
+#spotlight-description{margin:0 0 8px!important;color:#dbe8d4!important}
+body.scouter-fullscreen{overflow:hidden}
+.scouter-fullscreen header,.scouter-fullscreen .heading,.scouter-fullscreen footer,.scouter-fullscreen .guide,.scouter-fullscreen #chemistry{display:none!important}
+.scouter-fullscreen main{max-width:none;padding:0}
+.scouter-fullscreen #stage{position:fixed;inset:0;width:100vw;height:100dvh;border:0;border-radius:0}
+.scouter-fullscreen #video{object-fit:cover}
+.scouter-fullscreen .controls{position:fixed;top:12px;right:18px;left:210px;z-index:8;margin:0;padding:0;border:0;justify-content:flex-end;pointer-events:none}
+.scouter-fullscreen .controls .buttons{pointer-events:auto;background:#07130be8;padding:8px;border:1px solid #34483b;border-radius:4px}
+.scouter-fullscreen .counts,.scouter-fullscreen #capacity{display:none}
+.scouter-fullscreen .crew{position:fixed;left:18px;right:18px;bottom:54px;z-index:6;max-height:min(32vh,280px);overflow:auto;scrollbar-width:thin}
+.scouter-fullscreen .crew .section-label{display:none}
+.scouter-fullscreen #cards{grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.scouter-fullscreen .person-card{background:#0b180ee8;min-height:0;padding:10px 12px}
+.scouter-fullscreen .person-card h3{margin:6px 0;font-size:14px}
+.scouter-fullscreen .person-card .profile-type{margin-bottom:4px}
+.scouter-fullscreen .person-card .power{margin-top:6px}
+.scouter-fullscreen #spotlight{bottom:calc(min(32vh,280px) + 70px);width:350px;max-width:45%;background:#09170ded}
+.scouter-fullscreen #spotlight h3{font-size:22px}
+.scouter-fullscreen #spotlight p{font-size:14px}
+.scouter-fullscreen .stage-top{right:auto}
+.scouter-fullscreen #welcome{bottom:90px}
+.scouter-fullscreen .crew:has(.placeholder){display:none}
+@media(max-width:900px){.scouter-fullscreen #cards{display:flex;overflow-x:auto;scroll-snap-type:x proximity}.scouter-fullscreen .person-card{flex:0 0 230px;scroll-snap-align:start}.scouter-fullscreen .controls{left:12px;right:12px;top:55px}.scouter-fullscreen #spotlight{bottom:245px;max-width:65%;width:320px}.scouter-fullscreen #spotlight h3{font-size:18px}.scouter-fullscreen #spotlight p{font-size:12px}.scouter-fullscreen .crew{bottom:55px;max-height:175px}.scouter-fullscreen .buttons button{padding:8px}.scouter-fullscreen #spotlight-pair{display:block}}
