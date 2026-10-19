@@ -1,22 +1,25 @@
 {
-  "version": "0.8",
+  "version": "0.17",
+  "date": "2026-10-19",
   "claude": {
-    "status": "EXECUTED",
+    "execution": "EXECUTED",
+    "rounds": 1,
     "decision": "PASS_WITH_MINOR_ISSUES",
-    "blockers": 0,
+    "computationalVerdict": "COMPUTATIONAL_PASS",
+    "reviewScope": "Static selected-player input core, Worker, cancellation, current specification and aggregate synthetic results. Not whole-app or test-source audit.",
     "postAuditFixes": [
-      "Continuous open-finger arming interval",
-      "Cached DOM target enabled/visible validation"
-    ],
-    "reviewLimitations": [
-      "Physical camera not verified",
-      "Reviewer did not read all test/layout/depth source files in full"
+      "Consecutive recovery reset on missing observations",
+      "Reject overlapping candidates before pending selection",
+      "Main wrist slot diagnostics and targeted tests"
     ]
   },
-  "synthetic": {
-    "unitPassed": 59,
-    "browserPassed": 37
+  "local": {
+    "unitPassed": 92,
+    "syntheticBrowserPassed": 46,
+    "realModelVirtualCameraPassed": 6
   },
+  "publicCheckoutUnitPassed": 92,
   "physicalCameraVerified": false,
-  "privateInputsPublished": false
+  "realLandmarksOrPrivateMediaSent": false,
+  "scientificPass": "PENDING_HUMAN_REVIEW"
 }

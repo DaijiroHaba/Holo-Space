@@ -1,0 +1,83 @@
+// Ephemeral geometric association. Never biometric identity or persistent registration.
+export const PLAYER_LIMITS=Object.freeze({maxPoses:4,maxHands:4,poseIntervalMs:250,poseMaxIntervalMs:600,poseAgeMs:900,confirmMs:500,confirmSamples:3,recoverMs:2200,neutralMs:100});
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const valid=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>=0&&p.x<=1&&p.y>=0&&p.y<=1&&(p.visibility??1)>=.5&&(p.presence??1)>=.5;
+const dist=(a,b,aspect)=>Math.hypot((a.x-b.x)*aspect,a.y-b.y);
+export function handInsideAnalysis(h){return Array.isArray(h)&&h.length===21&&h.every(p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&p.x>.002&&p.x<.998&&p.y>.002&&p.y<.998);}
+export function sanitizeHands(r={}){const ids=(r.landmarks||[]).map((p,i)=>handInsideAnalysis(p)?i:-1).filter(i=>i>=0);return {landmarks:ids.map(i=>r.landmarks[i]),handedness:ids.map(i=>r.handedness?.[i]||[])};}
+export function describePlayer(points,index,aspect=16/9){
+ if(!Array.isArray(points)||!valid(points?.[11])||!valid(points?.[12]))return null;
+ const a=points[11],b=points[12],scale=dist(a,b,aspect);if(scale<.055)return null;
+ const visible=points.filter(valid),xs=visible.map(p=>p.x),ys=visible.map(p=>p.y);
+ return {index,points,center:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},scale,wrists:[15,16].map(i=>valid(points[i])?points[i]:null),box:{left:clamp(Math.min(...xs)-.035,0,1),right:clamp(Math.max(...xs)+.035,0,1),top:clamp(Math.min(...ys)-.055,0,1),bottom:clamp(Math.max(...ys)+.035,0,1)}};
+}
+export class PlayerSession{
+ constructor(config={}){this.limits={...PLAYER_LIMITS,...config};this.nextId=1;this.reset();}
+ reset(){this.epoch=(this.epoch||0)+1;this.state='unselected';this.people=[];this.selected=null;this.lastPose=-Infinity;this.selectedAt=0;this.samples=0;this.aspect=16/9;this.atCapacity=false;this.handAtCapacity=false;this.reason='人物の枠を選び「この人に決定」';this.recoverySince=null;this.recoverySamples=0;this.unknownWrists=[];this.lastMatch=-Infinity;this.handHistory=new Map();}
+ fresh(now){return Number.isFinite(now)&&now>=this.lastPose&&now-this.lastPose<=this.limits.poseAgeMs;}
+ ready(now){return this.state==='locked'&&this.fresh(now)&&!this.atCapacity;}
+ hold(reason){this.handHistory.clear();this.recoverySince=null;this.recoverySamples=0;if(this.state==='locked'||this.state==='pending'){this.epoch++;this.holdFrom=this.state;this.state='holding';}this.reason=reason;}
+ lose(reason){this.handHistory.clear();if(this.state!=='lost')this.epoch++;this.state='lost';this.selected=null;this.reason=reason+' / 選び直してください';}
+ reselect(){this.handHistory.clear();this.epoch++;this.state='unselected';this.selected=null;this.samples=0;this.reason='人物の枠を選び「この人に決定」';}
+ fail(){if(this.selected)this.lose('人物確認を再準備してください');else{this.state='unselected';this.reason='人物確認を再準備してください';}}
+ update(poses,stamp,aspect=16/9,now=stamp){
+  if(!Array.isArray(poses)){this.hold('人物の入力を確認中');return false;}
+  if(!Number.isFinite(stamp)||stamp<=this.lastPose||stamp>now||now-stamp>this.limits.poseAgeMs)return false;
+  const oldPeople=this.people,last=this.lastPose;this.lastPose=stamp;this.aspect=aspect;
+  this.people=(poses||[]).map((p,i)=>describePlayer(p,i,aspect)).filter(Boolean);
+  const used=new Set();for(const p of this.people){const ranks=oldPeople.filter(q=>!used.has(q.id)).map(q=>({q,d:dist(q.center,p.center,aspect)/Math.max(.055,q.scale)})).sort((a,b)=>a.d-b.d),best=ranks[0];p.id=best&&best.d<.5&&(!ranks[1]||ranks[1].d-best.d>.2)?best.q.id:this.nextId++;used.add(p.id);}
+  this.atCapacity=poses.length>=this.limits.maxPoses;
+  this.unknownWrists=(poses||[]).filter((_,i)=>!this.people.some(p=>p.index===i)).flatMap(p=>[p?.[15],p?.[16]].filter(valid));
+  if(!['pending','locked','holding'].includes(this.state))return true;
+  if(this.atCapacity){this.lose('人物候補が上限です（4人以上は確認できません）');return false;}
+  const prev=this.selected;if(!prev){this.lose('人物の基準がありません');return false;}
+  if(stamp-last>this.limits.recoverMs){this.lose('人物確認が長く途切れました');return false;}
+  const rank=this.people.map(person=>({person,cost:dist(prev.center,person.center,aspect)/prev.scale+Math.abs(Math.log(person.scale/prev.scale))})).sort((a,b)=>a.cost-b.cost),best=rank[0],second=rank[1];
+  if(!best){this.hold('人物を確認中 / 配置を保持');if(stamp-this.lastMatch>this.limits.recoverMs)this.lose('人物を見失いました');return false;}
+  if(best.cost>.8||best.person.scale/prev.scale<.65||best.person.scale/prev.scale>1.55){this.lose('選択人物との対応が変わりました');return false;}
+  if(second&&second.cost-best.cost<.3||this.people.some(p=>p!==best.person&&dist(p.center,best.person.center,aspect)<.7*Math.min(p.scale,best.person.scale))){this.lose('人物が重なり対応が曖昧です');return false;}
+  if(this.state==='holding'){
+   this.recoverySince??=stamp;this.recoverySamples++;
+   if(stamp-this.recoverySince<this.limits.confirmMs||this.recoverySamples<this.limits.confirmSamples){this.reason='同じ人物の復帰を確認中';return false;}
+   this.state=this.holdFrom==='pending'?'pending':'locked';this.epoch++;this.reason='人物を再確認 / 指を一度開いて再操作';this.selectedAt=stamp;this.samples=1;
+  }else this.samples++;
+  this.selected={...best.person,id:prev.id};this.lastMatch=stamp;return true;
+ }
+ choose(id,now){const p=this.people.find(p=>p.id===id);if(!p||!this.fresh(now)||this.atCapacity)return false;if(this.people.some(q=>q!==p&&dist(p.center,q.center,this.aspect)<.7*Math.min(p.scale,q.scale))){this.reason='人物が重なっています / 離れてから選択';return false;}this.handHistory.clear();this.epoch++;this.selected={...p};this.state='pending';this.selectedAt=now;this.lastMatch=now;this.samples=1;this.reason='選択中 / 枠を確認して「この人に決定」';return true;}
+ canConfirm(now){return this.state==='pending'&&this.fresh(now)&&!this.atCapacity&&now-this.selectedAt>=this.limits.confirmMs&&this.samples>=this.limits.confirmSamples;}
+ confirm(now){if(!this.canConfirm(now))return false;this.state='locked';this.epoch++;this.reason='プレイヤー固定 / 指を一度開いて操作';return true;}
+ expire(now){if(['locked','pending'].includes(this.state)&&!this.fresh(now))this.hold('人物確認の更新待ち / 配置を保持');if(this.state==='holding'&&now-this.lastMatch>this.limits.recoverMs)this.lose('人物確認が長く途切れました');}
+ filterHands(result,stamp,now=stamp){
+  this.handAtCapacity=(result.landmarks||[]).length>=this.limits.maxHands;
+  const empty=reason=>({landmarks:[],handedness:[],ownerSlots:[],reason});
+  if(!this.ready(now)||stamp>now||now-stamp>250||Math.abs(stamp-this.lastPose)>this.limits.poseAgeMs)return empty(this.reason||'人物確認の更新待ち');
+  const me=this.selected,others=this.people.filter(p=>p.index!==me.index),candidates=[];
+  for(const [index,hand]of(result.landmarks||[]).entries()){
+   if(!handInsideAnalysis(hand))continue;const wrist=hand[0],rank=me.wrists.map((p,slot)=>{const history=this.handHistory.get(slot),continuous=p&&history&&stamp-history.time<=220&&dist(wrist,history.wrist,this.aspect)<Math.max(.05,me.scale*.35);return {slot,d:p?Math.min(dist(wrist,p,this.aspect),continuous?dist(wrist,history.wrist,this.aspect)+.015:Infinity):Infinity};}).sort((a,b)=>a.d-b.d),best=rank[0];
+   if(!Number.isFinite(best.d)||best.d>Math.max(.06,me.scale*.5)||rank[1].d-best.d<Math.max(.025,me.scale*.13))continue;
+   const margin=Math.max(.03,me.scale*.15);
+   const other=others.some(p=>p.wrists.some(w=>w&&dist(wrist,w,this.aspect)<=best.d+margin)||p.wrists.some(w=>!w)&&dist(wrist,p.center,this.aspect)<p.scale*1.6)||this.unknownWrists.some(w=>dist(wrist,w,this.aspect)<=best.d+margin);
+   if(!other)candidates.push({index,slot:best.slot});
+  }
+  const accepted=candidates.filter(c=>candidates.filter(q=>q.slot===c.slot).length===1).sort((a,b)=>a.slot-b.slot);
+  const active=new Set(accepted.map(c=>c.slot));for(const slot of this.handHistory.keys())if(!active.has(slot))this.handHistory.delete(slot);for(const c of accepted)this.handHistory.set(c.slot,{wrist:{x:result.landmarks[c.index][0].x,y:result.landmarks[c.index][0].y},time:stamp});
+  return {landmarks:accepted.map(c=>result.landmarks[c.index]),handedness:accepted.map(c=>result.handedness?.[c.index]||[]),ownerSlots:accepted.map(c=>c.slot),reason:accepted.length?'':'選択した人の手を確認中'};
+ }
+ snapshot(now){return {state:this.state,epoch:this.epoch,ready:this.ready(now),reason:this.reason,candidates:this.people.length,atCapacity:this.atCapacity,handAtCapacity:this.handAtCapacity,ageMs:Number.isFinite(this.lastPose)?Math.max(0,Math.round(now-this.lastPose)):null};}
+}
+export class PlayerHandRoles{
+ constructor(){this.reset();}
+ reset(){this.main=null;this.openSince=new Map();this.enabled=new Set();this.lastSeen=new Map();}
+ requireRelease(){this.openSince.clear();this.enabled.clear();}
+ update(hands,time){
+  const present=new Set(hands.map(h=>h.ownerSlot));
+  for(const slot of this.lastSeen.keys())if(!present.has(slot)){this.enabled.delete(slot);this.openSince.delete(slot);}
+  const out=[];for(const h of hands){
+   const slot=h.ownerSlot;this.lastSeen.set(slot,time);
+   if(!this.enabled.has(slot)){if(h.pinch>=.46&&!h.brakeCandidate){if(!this.openSince.has(slot))this.openSince.set(slot,time);if(time-this.openSince.get(slot)>=PLAYER_LIMITS.neutralMs)this.enabled.add(slot);}else this.openSince.delete(slot);}
+   if(!this.enabled.has(slot))continue;if(this.main===null&&h.open)this.main=slot;if(this.main===null)continue;
+   out.push({...h,personSlot:slot===this.main?'main':'aux',trackKey:'selected-wrist-'+slot});
+  }
+  return out.sort((a,b)=>(a.personSlot==='main'?-1:1)-(b.personSlot==='main'?-1:1));
+ }
+}
