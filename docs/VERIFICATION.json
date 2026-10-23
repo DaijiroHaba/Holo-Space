@@ -27,5 +27,12 @@
     "previousV017AuditIsHistorical": true
   },
   "mediaOrRealLandmarksSavedPublishedOrSentToClaude": false,
-  "otherPcCrowdAccuracyAndLongRunMemoryVerified": false
+  "otherPcCrowdAccuracyAndLongRunMemoryVerified": false,
+  "public": {
+    "automaticSyntheticPassed": 15,
+    "realModelVirtualCameraPassed": 6,
+    "startupIndependencePassed": 3,
+    "finalRealChromeReload": "unverified: browser connection timeout",
+    "liveFixedWorkflowWasCheckedLocally": true
+  }
 }
