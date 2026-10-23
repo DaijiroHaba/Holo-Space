@@ -7,7 +7,7 @@ export class PlayerPoseSource{
   return new Promise((resolve,reject)=>{let initialized=false;
    const fail=()=>{if(generation!==this.generation)return;this.stop();this.onState('failed',null);if(!initialized)reject(Error('PoseWorkerUnavailable'));};
    try{
-    const worker=this.worker=new Worker(new URL('./player-pose-worker.mjs?v=0.17',import.meta.url));this.watchdog=setTimeout(fail,20000);
+    const worker=this.worker=new Worker(new URL('./player-pose-worker.mjs?v=0.17.1',import.meta.url));this.watchdog=setTimeout(fail,20000);
     worker.onerror=fail;worker.onmessage=({data})=>{
      if(generation!==this.generation)return;
      if(data.type==='ready'){clearTimeout(this.watchdog);initialized=true;this.ready=true;this.delegate=data.delegate;this.onState('ready',data.delegate);resolve(this);return;}
