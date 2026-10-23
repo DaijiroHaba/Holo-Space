@@ -1,9 +1,9 @@
-import {PlayerSession,PlayerHandRoles,sanitizeHands,PLAYER_LIMITS} from './player-input.mjs?v=0.17.1';
-import {PlayerPoseSource} from './player-pose-source.mjs?v=0.17.1';
-import {createScene} from './model.mjs?v=0.17.1';
-import {GestureEngine,describeHand,containedPoint,clamp,handCropRects,remapHandResult,mergeHandResults} from './gestures.mjs?v=0.17.1';
-import {Manipulator} from './manipulation.mjs?v=0.17.1';
-import {SummonGate,TapRouter,RotationHandoff,routeHandTargets,OperatorGate,ClapResetGate,createTimedTask} from './interaction-flow.mjs?v=0.17.1';
+import {PlayerSession,PlayerHandRoles,sanitizeHands,PLAYER_LIMITS} from './player-input.mjs?v=0.17.1-r2';
+import {PlayerPoseSource} from './player-pose-source.mjs?v=0.17.1-r2';
+import {createScene} from './model.mjs?v=0.17.1-r2';
+import {GestureEngine,describeHand,containedPoint,clamp,handCropRects,remapHandResult,mergeHandResults} from './gestures.mjs?v=0.17.1-r2';
+import {Manipulator} from './manipulation.mjs?v=0.17.1-r2';
+import {SummonGate,TapRouter,RotationHandoff,routeHandTargets,OperatorGate,ClapResetGate,createTimedTask} from './interaction-flow.mjs?v=0.17.1-r2';
 const $=id=>document.getElementById(id),lab=$('lab'),video=$('camera'),overlay=$('hand-overlay'),ctx=overlay.getContext('2d');
 const names={single:'人体模型',muscle:'筋肉',skeleton:'骨格',organs:'臓器',panel:'浮遊パネル'},layerNames={whole:'筋肉',skeleton:'骨格',organs:'臓器'};
 const base=(layer='whole',x=0,scale=1)=>({x,y:0,z:0,scale,rotation:-.15,tilt:0,roll:0,visible:true,layer});
@@ -36,7 +36,7 @@ function cancelPlayerMotion(time,{newPlayer=false,reason='player-transition'}={}
 function playerTick(time){
  if(playerMode==='locked'){
   player.expire(time);
-  if(player.epoch!==lastPlayerEpoch){lastPlayerEpoch=player.epoch;cancelPlayerMotion(time);}
+  if(player.epoch!==lastPlayerEpoch){lastPlayerEpoch=player.epoch;const newPlayer=player.newSelection;player.newSelection=false;cancelPlayerMotion(time,{newPlayer});}
   if(!player.ready(time)&&!playerBlocked)cancelPlayerMotion(time);
   if(mode==='camera'&&!recognitionRetry)void poseSource.tick(video,time);
  }
@@ -170,6 +170,7 @@ function updateHands(time,result){
  if(playerMode==='locked'&&!player.ready(now)){
   const seen=clean.landmarks.map(points=>{const h=describeHand(points,aspect);return h?{...h,points,wrist:points[0]}:null;}).filter(Boolean);
   player.offerSelectionHands(seen,time,now);
+  if(player.newSelection){player.newSelection=false;lastPlayerEpoch=player.epoch;cancelPlayerMotion(time,{newPlayer:true});}
   detectedFeedback=seen;rawHandCount=seen.length;
  }
  const owned=playerMode==='locked'?player.filterHands(result,time,now):clean;recordTime('ownershipMs',performance.now()-now);if(playerMode==='locked')player.handAtCapacity=player.handAtCapacity||fullFrameHands>=PLAYER_LIMITS.maxHands;

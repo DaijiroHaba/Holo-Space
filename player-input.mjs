@@ -31,7 +31,7 @@ function uniqueBodies(people,aspect){
 }
 export class PlayerSession{
  constructor(config={}){this.limits={...PLAYER_LIMITS,...config};this.nextId=1;this.reset();}
- reset(){this.epoch=(this.epoch||0)+1;this.state='unselected';this.people=[];this.selected=null;this.lastPose=-Infinity;this.selectedAt=0;this.samples=0;this.aspect=16/9;this.atCapacity=false;this.handAtCapacity=false;this.reason='人物の枠を選び「この人に決定」';this.recoverySince=null;this.recoverySamples=0;this.unknownWrists=[];this.lastMatch=-Infinity;this.handHistory=new Map();this.rawPoses=0;this.duplicatePoses=0;this.autoIntent=null;this.automatic=false;this.suspended=false;this.resumeAt=0;this.resumeMatch=false;}
+ reset(){this.epoch=(this.epoch||0)+1;this.state='unselected';this.people=[];this.selected=null;this.lastPose=-Infinity;this.selectedAt=0;this.samples=0;this.aspect=16/9;this.atCapacity=false;this.handAtCapacity=false;this.reason='人物の枠を選び「この人に決定」';this.recoverySince=null;this.recoverySamples=0;this.unknownWrists=[];this.lastMatch=-Infinity;this.handHistory=new Map();this.rawPoses=0;this.duplicatePoses=0;this.autoIntent=null;this.automatic=false;this.newSelection=false;this.suspended=false;this.resumeAt=0;this.resumeMatch=false;}
  fresh(now){return Number.isFinite(now)&&now>=this.lastPose&&now-this.lastPose<=this.limits.poseAgeMs;}
  ready(now){return !this.suspended&&this.state==='locked'&&this.fresh(now)&&!this.atCapacity;}
  hold(reason){this.handHistory.clear();this.recoverySince=null;this.recoverySamples=0;if(this.state==='locked'||this.state==='pending'){this.epoch++;this.holdFrom=this.state;this.state='holding';}this.reason=reason;}
@@ -75,7 +75,7 @@ export class PlayerSession{
   if(!this.choose(p.id,now))return false;
   this.selectedAt=p.seenSince;this.samples=p.observations;
   if(!this.confirm(now))return false;
-  this.automatic=true;this.autoIntent=null;this.reason='✓ 自動でプレイヤー固定 / 手を開いて3秒';
+  this.automatic=true;this.newSelection=true;this.autoIntent=null;this.reason='✓ 自動でプレイヤー固定 / 手を開いて3秒';
   return true;
  }
  offerSelectionHands(hands,stamp,now=stamp){
