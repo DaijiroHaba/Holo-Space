@@ -1,3 +1,4 @@
+import {renderPixelRatio} from './render-budget.mjs?v=0.17.2';
 import * as THREE from './vendor/three.module.js';
 import {GLTFLoader} from './vendor/three-r160/loaders/GLTFLoader.js';
 import {DRACOLoader} from './vendor/three-r160/loaders/DRACOLoader.js';
@@ -57,9 +58,10 @@ export function createScene(container,onProgress=()=>{}){
       anatomy.traverse(o=>{if(!o.isMesh)return;const clone=m=>{if(!materials.has(m)){const c=m.clone();c.userData.baseEmissive=c.emissive?.clone()||new THREE.Color();materials.set(m,c);}return materials.get(m);};o.material=Array.isArray(o.material)?o.material.map(clone):clone(o.material);});
       const view=camera.clone();return instances[id]={root,anatomy,view,materials:[...materials.values()],layer:null,glow:null,bounds:null};
   }
-  function setPerformanceMode(light){renderer.setPixelRatio(light?1:Math.min(devicePixelRatio,1.5));renderer.setSize(width,height);lastRenderKey='';}
-  function performanceInfo(){return {allocatedBodies:Object.keys(instances).filter(id=>id!=='panel').length,loadedTriangles:meta.triangles,loadedMeshes:meta.meshCount,pixelRatio:renderer.getPixelRatio(),drawCalls:renderer.info.render.calls,renderTriangles:renderer.info.render.triangles};}
-  function resize(){width=Math.max(1,container.clientWidth);height=Math.max(1,container.clientHeight);renderer.setSize(width,height);}
+  let lightRendering=false;
+  function setPerformanceMode(light){lightRendering=light;resize();lastRenderKey='';}
+  function performanceInfo(){return {allocatedBodies:Object.keys(instances).filter(id=>id!=='panel').length,loadedTriangles:meta.triangles,loadedMeshes:meta.meshCount,pixelRatio:renderer.getPixelRatio(),drawingPixels:renderer.domElement.width*renderer.domElement.height,renderPixelBudget:lightRendering?1280*720:1920*1080,drawCalls:renderer.info.render.calls,renderTriangles:renderer.info.render.triangles};}
+  function resize(){width=Math.max(1,container.clientWidth);height=Math.max(1,container.clientHeight);renderer.setPixelRatio(renderPixelRatio(width,height,devicePixelRatio,lightRendering));renderer.setSize(width,height);lastRenderKey='';}
   resize();
   function applyLayer(i,layer){
     if(i.layer===layer)return;i.layer=layer;

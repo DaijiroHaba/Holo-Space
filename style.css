@@ -36,3 +36,7 @@ button{min-height:46px}.intro{width:215px}.intro h1{font-size:32px}.intro .secon
 
 /* Model downloads must not block independent camera/person startup. */
 #model-loading{inset:auto;top:45%;left:50%;transform:translateX(-50%);width:320px;max-width:70%;padding:18px;border:1px solid #67eadd55;border-radius:14px;background:#07131ed9;pointer-events:none;font-size:13px;gap:10px}
+
+/* Player setup stays in a corner; no centre banner while operating. */
+#player-bar{top:90px;left:auto;right:18px;transform:none;width:330px;max-width:calc(100% - 36px);font-size:11px;padding:8px 10px}#player-bar[data-state=locked]{width:330px;min-width:0}#player-bar button{font-size:10px;padding:6px 8px}#player-bar>div{gap:5px}#player-bar label{margin-left:0}#player-bar select{max-width:180px}#player-launcher{font-size:10px!important}
+@media(max-width:950px){#player-bar,#player-bar[data-state=locked]{top:86px;right:10px;left:auto;width:300px;max-width:calc(100% - 20px)}#safety-controls{gap:4px}#safety-controls button{padding:8px 9px}}

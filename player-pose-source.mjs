@@ -1,7 +1,7 @@
 import {PLAYER_LIMITS} from './player-input.mjs';
 export class PlayerPoseSource{
- constructor(onResult,onState){this.onResult=onResult;this.onState=onState;this.worker=null;this.generation=0;this.busy=false;this.ready=false;this.last=-Infinity;this.inferenceMs=0;}
- stop(){this.generation++;clearTimeout(this.watchdog);this.worker?.terminate();this.worker=null;this.busy=false;this.ready=false;this.last=-Infinity;}
+ constructor(onResult,onState){this.onResult=onResult;this.onState=onState;this.worker=null;this.generation=0;this.busy=false;this.capturing=false;this.ready=false;this.last=-Infinity;this.inferenceMs=0;}
+ stop(){this.generation++;clearTimeout(this.watchdog);this.worker?.terminate();this.worker=null;this.busy=false;this.capturing=false;this.ready=false;this.last=-Infinity;}
  start(delegate='CPU'){
   this.stop();const generation=this.generation;this.onState('loading',null);
   return new Promise((resolve,reject)=>{let initialized=false;
@@ -19,10 +19,11 @@ export class PlayerPoseSource{
  }
  async tick(video,time){
   if(!this.ready||this.busy||video.readyState<2||time-this.last<Math.max(PLAYER_LIMITS.poseIntervalMs,Math.min(PLAYER_LIMITS.poseMaxIntervalMs,this.inferenceMs*(this.delegate==='CPU'?4:3))))return;
-  this.busy=true;this.last=time;const worker=this.worker,generation=this.generation;
+  this.busy=true;this.capturing=true;this.last=time;const worker=this.worker,generation=this.generation;
   let bitmap;try{const width=Math.min(640,video.videoWidth),height=Math.max(1,Math.round(width*video.videoHeight/video.videoWidth));bitmap=await createImageBitmap(video,{resizeWidth:width,resizeHeight:height});
    if(generation!==this.generation||worker!==this.worker){bitmap.close();return;}
+   this.capturing=false;
    this.watchdog=setTimeout(()=>{if(generation===this.generation){this.stop();this.onState('failed',null);}},3000);worker.postMessage({type:'frame',bitmap,time},[bitmap]);bitmap=null;
-  }catch{bitmap?.close();if(generation===this.generation){this.stop();this.onState('failed',null);}}
+  }catch{bitmap?.close();if(generation===this.generation){this.capturing=false;this.stop();this.onState('failed',null);}}
  }
 }

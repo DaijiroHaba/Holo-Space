@@ -1,38 +1,68 @@
 {
-  "version": "0.17.1",
-  "date": "2026-10-23",
-  "local": {
-    "unitPassed": 106,
-    "syntheticBrowserPassed": 61,
-    "realModelVirtualCameraAndStartupPassed": 9
-  },
-  "liveCamera": {
-    "screenObserved": [
-      "v0.17 false overlapping-person rejection with one visible person",
-      "automatic player lock",
-      "hand tracking",
-      "menu and anatomy summon"
-    ],
-    "userConfirmed": [
-      "grab and move",
-      "palm rotation",
-      "fist stop",
-      "two-hand zoom"
-    ],
-    "scope": "One PC, collaborative qualitative confirmation, not a recognition-rate or latency benchmark"
-  },
+  "version": "0.17.2",
+  "date": "2026-10-27",
+  "unitPassed": 120,
+  "local": [
+    {
+      "test": "run-player-unit",
+      "exitCode": 0,
+      "checks": 0
+    },
+    {
+      "test": "large-display-browser",
+      "exitCode": 0,
+      "checks": 8
+    },
+    {
+      "test": "large-roi-browser",
+      "exitCode": 0,
+      "checks": 6
+    },
+    {
+      "test": "player-auto-browser",
+      "exitCode": 0,
+      "checks": 15
+    },
+    {
+      "test": "player-browser",
+      "exitCode": 0,
+      "checks": 25
+    },
+    {
+      "test": "player-loss-browser",
+      "exitCode": 0,
+      "checks": 7
+    },
+    {
+      "test": "player-legacy-browser",
+      "exitCode": 0,
+      "checks": 14
+    },
+    {
+      "test": "player-runtime",
+      "exitCode": 0,
+      "checks": 6
+    },
+    {
+      "test": "player-startup-browser",
+      "exitCode": 0,
+      "checks": 3
+    }
+  ],
+  "syntheticBrowserPassed": 75,
+  "realModelVirtualCameraAndStartupPassed": 9,
+  "physicalCameraVerifiedThisVersion": false,
+  "largeMonitorLiveUsabilityVerified": false,
+  "reportedVideoReview": "hand skeleton visible, player confirmation blocks operations",
   "claude": {
     "route": "CLAUDE_AUDIT_RECOMMENDED",
     "execution": "NOT_REQUESTED",
-    "previousV017AuditIsHistorical": true
+    "priorAuditNotCurrent": true
   },
-  "mediaOrRealLandmarksSavedPublishedOrSentToClaude": false,
-  "otherPcCrowdAccuracyAndLongRunMemoryVerified": false,
-  "public": {
-    "automaticSyntheticPassed": 15,
-    "realModelVirtualCameraPassed": 6,
-    "startupIndependencePassed": 3,
-    "finalRealChromeReload": "unverified: browser connection timeout",
-    "liveFixedWorkflowWasCheckedLocally": true
-  }
+  "privateMediaPublishedOrSentExternally": false,
+  "limitations": [
+    "Synthetic performance is not real-camera recognition accuracy",
+    "Monocular geometric tracking cannot guarantee person identity under full occlusion",
+    "Geometry memory unchanged"
+  ]
 }

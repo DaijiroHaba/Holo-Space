@@ -4,7 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const port=Number(process.env.HOLO_PORT||8796);
-const top=new Set(['index.html','style.css','app.mjs','model.mjs','gestures.mjs','spatial-controller.mjs','depth-controller.mjs','manipulation.mjs','interaction-flow.mjs','player-input.mjs','player-pose-source.mjs','player-pose-worker.mjs','ATTRIBUTION.md']);
+const top=new Set(['index.html','style.css','app.mjs','model.mjs','gestures.mjs','spatial-controller.mjs','depth-controller.mjs','manipulation.mjs','interaction-flow.mjs','player-input.mjs','render-budget.mjs','player-pose-source.mjs','player-pose-worker.mjs','ATTRIBUTION.md']);
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.mjs':'text/javascript','.js':'text/javascript','.wasm':'application/wasm','.glb':'model/gltf-binary','.task':'application/octet-stream','.tflite':'application/octet-stream','.md':'text/plain; charset=utf-8'};
 const server=http.createServer(async(req,res)=>{
   const headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Permissions-Policy':'camera=(self), microphone=(), geolocation=()','Content-Security-Policy':"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'self'"};
