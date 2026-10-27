@@ -7,7 +7,7 @@ export class PlayerPoseSource{
   return new Promise((resolve,reject)=>{let initialized=false;
    const fail=()=>{if(generation!==this.generation)return;this.stop();this.onState('failed',null);if(!initialized)reject(Error('PoseWorkerUnavailable'));};
    try{
-    const worker=this.worker=new Worker(new URL('./player-pose-worker.mjs?v=0.17.1',import.meta.url));this.watchdog=setTimeout(fail,20000);
+    const worker=this.worker=new Worker(new URL('./player-pose-worker.mjs?v=0.17.2-a1',import.meta.url));this.watchdog=setTimeout(fail,20000);
     worker.onerror=fail;worker.onmessage=({data})=>{
      if(generation!==this.generation)return;
      if(data.type==='ready'){clearTimeout(this.watchdog);initialized=true;this.ready=true;this.delegate=data.delegate;this.onState('ready',data.delegate);resolve(this);return;}
@@ -20,10 +20,12 @@ export class PlayerPoseSource{
  async tick(video,time){
   if(!this.ready||this.busy||video.readyState<2||time-this.last<Math.max(PLAYER_LIMITS.poseIntervalMs,Math.min(PLAYER_LIMITS.poseMaxIntervalMs,this.inferenceMs*(this.delegate==='CPU'?4:3))))return;
   this.busy=true;this.capturing=true;this.last=time;const worker=this.worker,generation=this.generation;
+  const failFrame=()=>{if(generation===this.generation){this.stop();this.onState('failed',null);}};
+  this.watchdog=setTimeout(failFrame,3000);
   let bitmap;try{const width=Math.min(640,video.videoWidth),height=Math.max(1,Math.round(width*video.videoHeight/video.videoWidth));bitmap=await createImageBitmap(video,{resizeWidth:width,resizeHeight:height});
    if(generation!==this.generation||worker!==this.worker){bitmap.close();return;}
-   this.capturing=false;
-   this.watchdog=setTimeout(()=>{if(generation===this.generation){this.stop();this.onState('failed',null);}},3000);worker.postMessage({type:'frame',bitmap,time},[bitmap]);bitmap=null;
+   clearTimeout(this.watchdog);this.capturing=false;
+   this.watchdog=setTimeout(failFrame,3000);worker.postMessage({type:'frame',bitmap,time},[bitmap]);bitmap=null;
   }catch{bitmap?.close();if(generation===this.generation){this.capturing=false;this.stop();this.onState('failed',null);}}
  }
 }

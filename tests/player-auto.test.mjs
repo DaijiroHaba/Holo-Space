@@ -33,3 +33,20 @@ test('background tab suspension retains player but never uses stale frames after
  p.resume(10100);assert.equal(p.update([pose()],10000,16/9,10150),false);
  feed(p,[pose()],[10200,10500,10800]);assert.equal(p.state,'locked');assert.equal(p.selected.id,id);
 });
+
+test('bystander palm during a short hold cannot replace the selected player',()=>{
+ const p=new PlayerSession({autoSelect:true});feed(p,[pose(.3)],[0,250,500,750]);const id=p.selected.id,b=pose(.8);
+ for(const t of[1000,1250,1500,1750,2000,2250,2500]){p.update([b],t);p.offerSelectionHands([{open:true,wrist:b[15]}],t);}
+ assert.equal(p.state,'holding');assert.equal(p.selected.id,id);assert.equal(p.autoIntent,null);assert.equal(p.ready(2500),false);
+});
+test('short hold recovers original person without a new palm-selection intent',()=>{
+ const p=new PlayerSession({autoSelect:true});feed(p,[pose(.3)],[0,250,500,750]);const id=p.selected.id;
+ p.update([pose(.8)],1000);p.offerSelectionHands([{open:true,wrist:pose(.8)[15]}],1000);
+ feed(p,[pose(.3)],[1250,1500,1750]);assert.equal(p.state,'locked');assert.equal(p.selected.id,id);assert.equal(p.autoIntent,null);
+});
+test('only after long loss can a new held palm select another person',()=>{
+ const p=new PlayerSession({autoSelect:true});feed(p,[pose(.3)],[0,250,500,750]);const old=p.selected.id,b=pose(.8);
+ p.update([b],1000);p.expire(3000);assert.equal(p.state,'lost');
+ for(const t of[3100,3350,3600,3850,4100,4350,4600]){p.update([b],t);p.offerSelectionHands([{open:true,wrist:b[15]}],t);}
+ assert.equal(p.state,'locked');assert.notEqual(p.selected.id,old);assert.equal(p.selected.center.x,.8);
+});

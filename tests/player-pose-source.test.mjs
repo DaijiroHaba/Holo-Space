@@ -13,3 +13,29 @@ test('failed transfer closes the untransferred bitmap and pauses source',()=>fix
 test('worker error terminates processing instead of hand-only fallback',()=>fixture(async({s,created,states})=>{await s.start();created[0].onmessage({data:{type:'error'}});assert.equal(s.ready,false);assert.equal(created[0].terminated,true);assert.equal(states.at(-1),'failed');}));
 
 test('CPU cadence reduces duty for a 100ms inference instead of running at 4fps',()=>fixture(async({s,video,created})=>{await s.start('CPU');await s.tick(video,0);created[0].onmessage({data:{type:'poses',time:0,inferenceMs:100,landmarks:[]}});await s.tick(video,250);assert.equal(created[0].sent.length,2);await s.tick(video,400);assert.equal(created[0].sent.length,3);}));
+
+async function clocked(run){
+ const oldSet=globalThis.setTimeout,oldClear=globalThis.clearTimeout,timers=[];
+ globalThis.setTimeout=(fn,ms)=>{const t={fn,ms,cleared:false};timers.push(t);return t;};
+ globalThis.clearTimeout=t=>{if(t&&typeof t==='object'&&'cleared'in t)t.cleared=true;else oldClear(t);};
+ try{await run(timers);}finally{globalThis.setTimeout=oldSet;globalThis.clearTimeout=oldClear;}
+}
+test('unsettled bitmap capture times out and releases the Hand inference gate',()=>clocked(timers=>fixture(async({s,video,created,states})=>{
+ await s.start();let resolve;globalThis.createImageBitmap=()=>new Promise(r=>resolve=r);
+ const pending=s.tick(video,300);assert.equal(s.capturing,true);
+ const watchdog=timers.filter(t=>t.ms===3000&&!t.cleared).at(-1);assert.ok(watchdog,'capture must be watched before bitmap settles');
+ watchdog.fn();assert.equal(s.capturing,false);assert.equal(s.busy,false);assert.equal(s.ready,false);assert.equal(states.at(-1),'failed');assert.equal(created[0].terminated,true);
+ const late={closed:0,close(){this.closed++;}};resolve(late);await pending;assert.equal(late.closed,1);assert.equal(created[0].sent.length,1);
+})));
+test('capture timeout and late bitmap cannot cancel a restarted Pose generation',()=>clocked(timers=>fixture(async({s,video,created,results})=>{
+ await s.start();let resolve;globalThis.createImageBitmap=()=>new Promise(r=>resolve=r);const pending=s.tick(video,300);
+ const watchdog=timers.filter(t=>t.ms===3000&&!t.cleared).at(-1);assert.ok(watchdog);watchdog.fn();await s.start();
+ const late={closed:0,close(){this.closed++;}};resolve(late);await pending;
+ assert.equal(s.ready,true);assert.equal(s.capturing,false);assert.equal(late.closed,1);assert.equal(created[1].terminated,undefined);assert.equal(results.length,0);
+})));
+test('successful capture replaces capture timeout with one inference timeout',()=>clocked(timers=>fixture(async({s,video})=>{
+ await s.start();let resolve;globalThis.createImageBitmap=()=>new Promise(r=>resolve=r);const pending=s.tick(video,300);
+ const capture=timers.filter(t=>t.ms===3000&&!t.cleared).at(-1);assert.ok(capture);
+ resolve({close(){}});await pending;assert.equal(capture.cleared,true);assert.equal(s.capturing,false);assert.equal(s.busy,true);
+ assert.equal(timers.filter(t=>t.ms===3000&&!t.cleared).length,1);
+})));

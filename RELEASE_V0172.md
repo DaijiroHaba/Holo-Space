@@ -25,3 +25,6 @@ research-cross-provider-auditの終了時ルーティングを適用：CLAUDE_AU
 
 ## ローカル結果
 単体120/120、合成ブラウザー75/75、実モデル仮想カメラ・起動9/9。個々の結果は公開docs/VERIFICATION.jsonを参照。公開後の検証はworkのcloseoutに別記する。
+
+## その後のClaude監査 / A1
+2026-10-27、ユーザーの明示依頼で1回の独立静的監査を実施。PASS_WITH_MINOR_ISSUES / COMPUTATIONAL_PASS。主要な人物入力経路等を確認し、全コードの網羅的監査ではない。指摘3点を修正し、単体126/126に更新。元の監査・検証結果と修正後の結果を分ける。詳細はPOST_AUDIT_V0172.md。

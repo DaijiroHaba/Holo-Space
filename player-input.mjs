@@ -92,7 +92,7 @@ export class PlayerSession{
   return true;
  }
  offerSelectionHands(hands,stamp,now=stamp){
-  if(!this.limits.autoSelect||!['unselected','lost','holding'].includes(this.state)||!this.fresh(now)||!Number.isFinite(stamp)||stamp>now||now-stamp>this.inputTiming.handAgeMs||this.atCapacity){this.autoIntent=null;return false;}
+  if(!this.limits.autoSelect||!['unselected','lost'].includes(this.state)||!this.fresh(now)||!Number.isFinite(stamp)||stamp>now||now-stamp>this.inputTiming.handAgeMs||this.atCapacity){this.autoIntent=null;return false;}
   const owners=new Set();
   for(const h of hands){if(!h.open||!h.wrist)continue;
    const rank=this.people.map(p=>({p,d:Math.min(...p.wrists.filter(Boolean).map(w=>dist(h.wrist,w,this.aspect)))})).sort((a,b)=>a.d-b.d),best=rank[0];
@@ -102,7 +102,7 @@ export class PlayerSession{
   const id=[...owners][0],p=this.people.find(p=>p.id===id);
   if(!this.autoIntent||this.autoIntent.id!==id||now-this.autoIntent.last>this.inputTiming.intentGapMs)this.autoIntent={id,since:now,last:now,samples:0};
   this.autoIntent.last=now;this.autoIntent.samples++;this.reason='掌を開いた人を確認中 / そのまま…';
-  if(now-this.autoIntent.since<(['lost','holding'].includes(this.state)?1500:this.limits.autoIntentMs)||this.autoIntent.samples<3||p.observations<3)return false;
+  if(now-this.autoIntent.since<(this.state==='lost'?1500:this.limits.autoIntentMs)||this.autoIntent.samples<3||p.observations<3)return false;
   return this.activateAutomatic(p,now);
  }
  choose(id,now){const p=this.people.find(p=>p.id===id);if(!p||!this.fresh(now)||this.atCapacity)return false;if(this.people.some(q=>q!==p&&dist(p.center,q.center,this.aspect)<.7*Math.min(p.scale,q.scale))){this.reason='人物が重なっています / 離れてから選択';return false;}this.handHistory.clear();this.automatic=false;this.epoch++;this.selected={...p};this.state='pending';this.selectedAt=now;this.lastMatch=now;this.samples=1;this.reason='選択中 / 枠を確認して「この人に決定」';return true;}

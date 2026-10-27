@@ -1,4 +1,4 @@
-import {renderPixelRatio} from './render-budget.mjs?v=0.17.2';
+import {renderPixelRatio} from './render-budget.mjs?v=0.17.2-a1';
 import * as THREE from './vendor/three.module.js';
 import {GLTFLoader} from './vendor/three-r160/loaders/GLTFLoader.js';
 import {DRACOLoader} from './vendor/three-r160/loaders/DRACOLoader.js';

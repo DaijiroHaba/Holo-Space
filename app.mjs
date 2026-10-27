@@ -1,9 +1,9 @@
-import {PlayerSession,PlayerHandRoles,sanitizeHands,PLAYER_LIMITS} from './player-input.mjs?v=0.17.2';
-import {PlayerPoseSource} from './player-pose-source.mjs?v=0.17.2';
-import {createScene} from './model.mjs?v=0.17.2';
-import {GestureEngine,describeHand,containedPoint,clamp,handCropRects,remapHandResult,mergeHandResults} from './gestures.mjs?v=0.17.2';
-import {Manipulator} from './manipulation.mjs?v=0.17.2';
-import {SummonGate,TapRouter,RotationHandoff,routeHandTargets,OperatorGate,ClapResetGate,createTimedTask} from './interaction-flow.mjs?v=0.17.2';
+import {PlayerSession,PlayerHandRoles,sanitizeHands,PLAYER_LIMITS} from './player-input.mjs?v=0.17.2-a1';
+import {PlayerPoseSource} from './player-pose-source.mjs?v=0.17.2-a1';
+import {createScene} from './model.mjs?v=0.17.2-a1';
+import {GestureEngine,describeHand,containedPoint,clamp,handCropRects,remapHandResult,mergeHandResults} from './gestures.mjs?v=0.17.2-a1';
+import {Manipulator} from './manipulation.mjs?v=0.17.2-a1';
+import {SummonGate,TapRouter,RotationHandoff,routeHandTargets,OperatorGate,ClapResetGate,createTimedTask} from './interaction-flow.mjs?v=0.17.2-a1';
 const $=id=>document.getElementById(id),lab=$('lab'),video=$('camera'),overlay=$('hand-overlay'),ctx=overlay.getContext('2d');
 const names={single:'人体模型',muscle:'筋肉',skeleton:'骨格',organs:'臓器',panel:'浮遊パネル'},layerNames={whole:'筋肉',skeleton:'骨格',organs:'臓器'};
 const base=(layer='whole',x=0,scale=1)=>({x,y:0,z:0,scale,rotation:-.15,tilt:0,roll:0,visible:true,layer});

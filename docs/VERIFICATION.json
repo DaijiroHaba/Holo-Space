@@ -1,7 +1,8 @@
 {
   "version": "0.17.2",
+  "revision": "A1",
   "date": "2026-10-27",
-  "unitPassed": 120,
+  "unitPassed": 126,
   "local": [
     {
       "test": "run-player-unit",
@@ -47,22 +48,33 @@
       "test": "player-startup-browser",
       "exitCode": 0,
       "checks": 3
+    },
+    {
+      "test": "audit-recovery-browser",
+      "exitCode": 0,
+      "checks": 6
     }
   ],
-  "syntheticBrowserPassed": 75,
+  "syntheticBrowserPassed": 81,
   "realModelVirtualCameraAndStartupPassed": 9,
-  "physicalCameraVerifiedThisVersion": false,
-  "largeMonitorLiveUsabilityVerified": false,
-  "reportedVideoReview": "hand skeleton visible, player confirmation blocks operations",
+  "physicalCameraVerifiedThisRevision": false,
   "claude": {
     "route": "CLAUDE_AUDIT_RECOMMENDED",
-    "execution": "NOT_REQUESTED",
-    "priorAuditNotCurrent": true
+    "execution": "EXECUTED",
+    "rounds": 1,
+    "decision": "PASS_WITH_MINOR_ISSUES",
+    "computationalVerdict": "COMPUTATIONAL_PASS",
+    "blockers": 0,
+    "minorIssues": 3,
+    "findingsFixedByCodex": 3,
+    "independentReauditAfterFix": false,
+    "scope": "Main player input, ROI and loop paths, capture source, timing and render budget; not whole-code exhaustive; no tests executed by Claude"
   },
-  "privateMediaPublishedOrSentExternally": false,
-  "limitations": [
-    "Synthetic performance is not real-camera recognition accuracy",
-    "Monocular geometric tracking cannot guarantee person identity under full occlusion",
-    "Geometry memory unchanged"
-  ]
+  "postAuditRegression": {
+    "newUnitTests": 6,
+    "preFixFailures": 5,
+    "postFixUnitPassed": 126,
+    "captureTimeoutRecoveryBrowserChecks": 6
+  },
+  "privateMediaPublishedOrSentToClaude": false
 }
