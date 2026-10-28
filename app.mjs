@@ -1,3 +1,4 @@
+import {fitFloatingPanel} from './panel-layout.mjs?v=0.17.2-p1';
 import {PlayerSession,PlayerHandRoles,sanitizeHands,PLAYER_LIMITS} from './player-input.mjs?v=0.17.2-a1';
 import {PlayerPoseSource} from './player-pose-source.mjs?v=0.17.2-a1';
 import {createScene} from './model.mjs?v=0.17.2-a1';
@@ -87,7 +88,7 @@ function refresh(){
  $('model-list').replaceChildren(...activeIds().map(id=>{const row=document.createElement('div');row.className='model-row';const b=document.createElement('button');b.className='choose';b.dataset.model=id;b.dataset.action=`select-${id}`;b.textContent=label(id);b.setAttribute('aria-pressed',String(selected===id));b.disabled=!objects[id].visible;const v=document.createElement('button');v.className='visibility';v.dataset.action=`visibility-${id}`;v.dataset.visibility=id;v.textContent=objects[id].visible?'表示中':'非表示';v.setAttribute('aria-label',`${label(id)}を${objects[id].visible?'隠す':'表示'}`);row.append(b,v);return row;}));
  document.querySelectorAll('[data-layer]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.layer===objects.single.layer)));
  $('selected-name').textContent=selected?label(selected):'未選択';$('selected-help').textContent=operation==='rotate'?'掌で回転 / こぶしで固定・つまんで引き継ぐ':operation==='inspect'?'角度固定 / 片手ずつつまんで移動・拡大':operation==='dual'?'自由操作 / 片手ずつつまんで保持':operation==='depth'?'掌に合わせて上下左右・奥行き移動':'光る枠内をつまんで直接つかむ';
- $('mode-controls').hidden=stage!=='workspace'||menu||!$('settings-panel').hidden;for(const op of ['place','rotate','inspect','dual']){$('mode-'+op).setAttribute('aria-pressed',String(operation===op));$('mode-'+op).disabled=!selected||(selected==='panel'&&op==='rotate');}
+ $('controls-reset').hidden=stage!=='workspace'||menu;$('mode-controls').hidden=stage!=='workspace'||menu||!$('settings-panel').hidden;for(const op of ['place','rotate','inspect','dual']){$('mode-'+op).setAttribute('aria-pressed',String(operation===op));$('mode-'+op).disabled=!selected||(selected==='panel'&&op==='rotate');}
  $('toggle-panel').textContent=objects.panel.visible?'浮遊パネルを隠す':'浮遊パネルを表示';$('depth-mode').setAttribute('aria-pressed',String(operation==='depth'));
  for(const id of ['zoom-in','zoom-out','depth-near','depth-far','depth-mode','deselect'])$(id).disabled=!selected;$('reset').disabled=stage!=='workspace';$('close-menu').textContent=stage==='workspace'?'空間へ戻る':'かざす画面へ戻る';
 }
@@ -318,7 +319,14 @@ async function startCamera(){
 function stopCamera(){poseSource.stop();player.hold('カメラ停止 / 再開後に人物を選択');cancelPlayerMotion(performance.now());poseState='idle';++cameraToken;detectorEpoch++;if(!detector)detectorPromise=null;if(!rescueDetector)rescuePromise=null;recognitionState='idle';detectedFeedback=[];mode='preview';stream?.getTracks().forEach(t=>t.stop());stream=null;video.pause();video.srcObject=null;resetInput();lab.classList.remove('camera-on');$('start').hidden=false;$('start').disabled=false;$('start').textContent='◉ カメラで体験';$('stop-camera').hidden=true;$('hand-count').textContent='検出 0 手';$('mode-tag').textContent='PREVIEW';setPhase('placed','カメラを停止 / すべての配置を保持しています');}
 function cameraFailure(message){stopCamera();$('error').hidden=false;$('error').textContent=message;}
 
-function fitHandControls(){const lo=mode==='camera'?point(0,0):{x:0,y:80},hi=mode==='camera'?point(1,1):{x:lab.clientWidth,y:lab.clientHeight};const bottom=Math.max(immersive?20:34,lab.clientHeight-hi.y+16);lab.style.setProperty('--dock-bottom',bottom+'px');lab.style.setProperty('--feedback-bottom',(bottom+64)+'px');const panel=$('mode-controls'),w=panel.offsetWidth||240,h=panel.offsetHeight||262,minX=lo.x+Math.max(18,(hi.x-lo.x)*.13),maxX=Math.max(minX,hi.x-w-Math.max(18,(hi.x-lo.x)*.13)),minY=Math.max(86,lo.y+8),maxY=Math.max(minY,hi.y-h-Math.max(88,(hi.y-lo.y)*.28));const desired=controlsPosition||{x:maxX,y:lab.clientHeight*.58};const x=clamp(desired.x,minX,maxX),y=clamp(desired.y,minY,maxY);panel.style.left=x+'px';panel.style.top=y+'px';if(controlsPosition)controlsPosition={x,y};}
+function fitHandControls(){
+ const lo=mode==='camera'?point(0,0):{x:0,y:0},hi=mode==='camera'?point(1,1):{x:lab.clientWidth,y:lab.clientHeight};const bottom=Math.max(immersive?20:34,lab.clientHeight-hi.y+16);
+ lab.style.setProperty('--dock-bottom',bottom+'px');lab.style.setProperty('--feedback-bottom',(bottom+64)+'px');
+ const panel=$('mode-controls'),w=panel.offsetWidth||240,h=panel.offsetHeight||262;
+ const initialPlace={x:hi.x-w-Math.max(20,(hi.x-lo.x)*.1),y:Math.max(88,lo.y+16)};
+ const placed=fitFloatingPanel(controlsPosition||initialPlace,{width:lab.clientWidth,height:lab.clientHeight,panelWidth:w,panelHeight:h});
+ panel.style.left=placed.x+'px';panel.style.top=placed.y+'px';if(controlsPosition)controlsPosition=placed;
+}
 function frame(time){
  requestAnimationFrame(frame);frameCount++;time=performance.now();if(mode==='camera'&&document.hidden)return;
  try{playerTick(time);}catch(e){player.fail();cancelPlayerMotion(time);console.warn('Player input paused',e.name);}

@@ -1,8 +1,7 @@
 {
   "version": "0.17.2",
-  "revision": "A1",
-  "date": "2026-10-27",
-  "unitPassed": 126,
+  "revision": "P1",
+  "unitPassed": 131,
   "local": [
     {
       "test": "run-player-unit",
@@ -10,14 +9,9 @@
       "checks": 0
     },
     {
-      "test": "large-display-browser",
+      "test": "panel-browser",
       "exitCode": 0,
-      "checks": 8
-    },
-    {
-      "test": "large-roi-browser",
-      "exitCode": 0,
-      "checks": 6
+      "checks": 11
     },
     {
       "test": "player-auto-browser",
@@ -30,51 +24,25 @@
       "checks": 25
     },
     {
-      "test": "player-loss-browser",
+      "test": "large-display-browser",
       "exitCode": 0,
-      "checks": 7
-    },
-    {
-      "test": "player-legacy-browser",
-      "exitCode": 0,
-      "checks": 14
-    },
-    {
-      "test": "player-runtime",
-      "exitCode": 0,
-      "checks": 6
-    },
-    {
-      "test": "player-startup-browser",
-      "exitCode": 0,
-      "checks": 3
-    },
-    {
-      "test": "audit-recovery-browser",
-      "exitCode": 0,
-      "checks": 6
+      "checks": 8
     }
   ],
-  "syntheticBrowserPassed": 81,
-  "realModelVirtualCameraAndStartupPassed": 9,
+  "syntheticBrowserPassed": 59,
   "physicalCameraVerifiedThisRevision": false,
+  "newRealAiModelRuntimeTestPerformed": false,
+  "cameraAndGestureAlgorithmsChanged": false,
   "claude": {
     "route": "CLAUDE_AUDIT_RECOMMENDED",
-    "execution": "EXECUTED",
-    "rounds": 1,
-    "decision": "PASS_WITH_MINOR_ISSUES",
-    "computationalVerdict": "COMPUTATIONAL_PASS",
-    "blockers": 0,
-    "minorIssues": 3,
-    "findingsFixedByCodex": 3,
-    "independentReauditAfterFix": false,
-    "scope": "Main player input, ROI and loop paths, capture source, timing and render budget; not whole-code exhaustive; no tests executed by Claude"
+    "execution": "NOT_REQUESTED",
+    "priorA1AuditIsHistorical": true,
+    "previousRecord": "POST_AUDIT_V0172.md"
   },
-  "postAuditRegression": {
-    "newUnitTests": 6,
-    "preFixFailures": 5,
-    "postFixUnitPassed": 126,
-    "captureTimeoutRecoveryBrowserChecks": 6
-  },
-  "privateMediaPublishedOrSentToClaude": false
+  "changes": [
+    "full-screen palette placement with 8px visibility boundary",
+    "independent palette recovery in immersive view",
+    "player settings and safety buttons above palette"
+  ],
+  "privateMediaPublishedOrExternallyAudited": false
 }
